@@ -54,12 +54,12 @@ All art is listed in `src/data/assets.ts`. Each entry has a code-drawn placehold
 
 ## Deployment
 
-Cloudflare Pages, connected to this GitHub repo:
+Cloudflare Workers (static assets), connected to this GitHub repo via Workers Builds. Config lives in `wrangler.jsonc`.
 
 - Production branch: `main`
 - Build command: `npm run build`
-- Build output directory: `dist`
-- Root directory: repository root
+- Deploy command: `npx wrangler deploy` (uploads `dist/`)
+- Preview command: `npx wrangler preview`
 - Node version comes from `.node-version`
 
 Every push to `main` deploys to production; other branches get preview deployments.
