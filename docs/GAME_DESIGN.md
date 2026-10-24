@@ -25,7 +25,8 @@ All numbers live in `TANK` in `src/data/tuning.ts`.
 - Hull swings toward the input direction at 450°/s (it doesn't steer the movement; movement is immediate in the pressed direction).
 - Turret tracks the mouse at 540°/s, independent of the hull.
 - Circular collision body (r = 20). Collisions bleed off speed because acceleration starts from the body's actual velocity.
-- Camera follows with lerp 0.12.
+- Camera follows with lerp 0.12 (per 60 Hz frame, scaled by frame time so it feels the same on 144 Hz displays).
+- Arcade physics steps once per rendered frame (`fixedStep: false`) to avoid judder on high-refresh displays.
 - Dust puffs from the rear treads every ~14 px traveled.
 
 ## Obstacles (M1)

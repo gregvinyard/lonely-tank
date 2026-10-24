@@ -24,7 +24,9 @@ const game = new Phaser.Game({
   },
   physics: {
     default: 'arcade',
-    arcade: { debug: false },
+    // Step physics with each rendered frame instead of a fixed 60 Hz, so motion
+    // stays smooth on high-refresh displays. Movement code is delta-time based.
+    arcade: { debug: false, fixedStep: false },
   },
   scene: [BootScene, GameScene, HudScene],
 });

@@ -71,3 +71,16 @@ describe('zoomForViewport', () => {
     expect(zoomForViewport(5000)).toBe(4);
   });
 });
+
+describe('frameLerp', () => {
+  it('matches the base lerp at 60 Hz', async () => {
+    const { frameLerp } = await import('../src/data/tuning');
+    expect(frameLerp(0.12, 1000 / 60)).toBeCloseTo(0.12);
+  });
+
+  it('two 120 Hz frames close the same gap as one 60 Hz frame', async () => {
+    const { frameLerp } = await import('../src/data/tuning');
+    const l = frameLerp(0.12, 1000 / 120);
+    expect(1 - (1 - l) * (1 - l)).toBeCloseTo(0.12);
+  });
+});

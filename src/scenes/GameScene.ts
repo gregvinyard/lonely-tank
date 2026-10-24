@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { CAMERA, OBSTACLES, WORLD_SEED, WORLD_SIZE, zoomForViewport } from '../data/tuning';
+import { CAMERA, OBSTACLES, WORLD_SEED, WORLD_SIZE, frameLerp, zoomForViewport } from '../data/tuning';
 import { Tank } from '../entities/Tank';
 import { placeRocks } from '../systems/worldgen';
 
@@ -82,6 +82,11 @@ export class GameScene extends Phaser.Scene {
     const aim = pointer.positionToCamera(this.cameras.main) as Phaser.Math.Vector2;
 
     this.tank.update(input, aim, delta);
+
+    // Camera lerp is applied once per frame; scale it so the follow feels the
+    // same at 60 Hz and 144 Hz.
+    const l = frameLerp(CAMERA.lerp, delta);
+    this.cameras.main.setLerp(l, l);
     this.emitDust(delta);
   }
 

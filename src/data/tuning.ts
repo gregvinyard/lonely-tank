@@ -28,11 +28,16 @@ export const TANK = {
 } as const;
 
 export const CAMERA = {
-  lerp: 0.12, // 0..1 per frame; lower = floatier follow
+  lerp: 0.12, // fraction of the gap closed per 60 Hz frame; lower = floatier follow
   // Integer zoom is picked so roughly this many world pixels fit vertically.
   targetViewHeight: 400,
   maxZoom: 4,
 } as const;
+
+/** Converts the 60 Hz follow lerp into the equivalent for a frame of `deltaMs`. */
+export function frameLerp(lerpAt60: number, deltaMs: number): number {
+  return 1 - Math.pow(1 - lerpAt60, deltaMs / (1000 / 60));
+}
 
 /** Whole-number zoom keeps pixel art crisp at any window size. */
 export function zoomForViewport(height: number): number {
