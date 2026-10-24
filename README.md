@@ -22,7 +22,7 @@ npm run dev        # dev server at http://localhost:5173
 | `npm run preview` | Serve the production build locally |
 | `npm run typecheck` | TypeScript only |
 | `npm test` | Unit tests (Vitest, `tests/`) |
-| `npm run test:e2e` | Browser smoke test (Playwright, `e2e/`) — run `npx playwright install chromium` once first |
+| `npm run test:e2e` | Browser tests (Playwright, `e2e/`) — run `npx playwright install chromium` once first. Set `BASE_URL` to test a deployed build. |
 
 ## Controls
 
@@ -31,7 +31,7 @@ npm run dev        # dev server at http://localhost:5173
 | W/A/S/D | Drive |
 | Mouse | Aim turret |
 
-More controls arrive with later milestones (see the spec).
+More controls arrive with later milestones (see the spec). Add `?debug` to the URL to see physics bodies.
 
 ## Project layout
 

@@ -17,3 +17,31 @@ export const PALETTE = {
 } as const;
 
 export const WORLD_SEED = 1337;
+
+export const TANK = {
+  maxSpeed: 160, // px/sec
+  accel: 420, // px/sec^2 — ~0.4s to full speed
+  decel: 520, // px/sec^2 — ~0.3s to stop
+  hullTurnRate: Math.PI * 2.5, // rad/sec the hull swings toward the travel direction
+  turretTurnRate: Math.PI * 3, // rad/sec the turret tracks the cursor
+  bodyRadius: 20, // collision circle, px
+} as const;
+
+export const CAMERA = {
+  lerp: 0.12, // 0..1 per frame; lower = floatier follow
+  // Integer zoom is picked so roughly this many world pixels fit vertically.
+  targetViewHeight: 400,
+  maxZoom: 4,
+} as const;
+
+/** Whole-number zoom keeps pixel art crisp at any window size. */
+export function zoomForViewport(height: number): number {
+  return Math.min(CAMERA.maxZoom, Math.max(1, Math.round(height / CAMERA.targetViewHeight)));
+}
+
+export const OBSTACLES = {
+  rockCount: 70,
+  rockRadius: 22, // collision circle, px
+  clearRadius: 220, // keep the spawn area around the world center open
+  minSpacing: 80, // px between rock centers
+} as const;

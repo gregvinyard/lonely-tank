@@ -37,6 +37,7 @@ export const ASSETS: AssetDef[] = [
     key: 'tank_hull',
     width: 64,
     height: 64,
+    file: 'assets/tank_hull.png',
     placeholder: (g) => {
       // Treads
       g.fillStyle(PALETTE.metalDark).fillRect(12, 14, 40, 9).fillRect(12, 41, 40, 9);
@@ -55,6 +56,7 @@ export const ASSETS: AssetDef[] = [
     key: 'tank_turret',
     width: 64,
     height: 64,
+    file: 'assets/tank_turret.png',
     placeholder: (g) => {
       g.fillStyle(PALETTE.metal).fillRect(32, 30, 24, 4);
       g.fillStyle(PALETTE.metalDark).fillRect(54, 29, 4, 6);
@@ -72,6 +74,16 @@ export const ASSETS: AssetDef[] = [
       g.fillStyle(0x5a4a5e).fillCircle(32, 32, 24);
       g.fillStyle(0x705d73).fillCircle(28, 27, 17);
       g.fillStyle(0x8a7590).fillCircle(24, 22, 7);
+    },
+  },
+  {
+    // Soft dust puff kicked up by the treads.
+    key: 'dust',
+    width: 8,
+    height: 8,
+    placeholder: (g) => {
+      g.fillStyle(PALETTE.sandLight, 0.5).fillCircle(4, 4, 4);
+      g.fillStyle(PALETTE.sandLight, 0.8).fillCircle(4, 4, 2);
     },
   },
 ];
