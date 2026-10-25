@@ -9,6 +9,7 @@ import {
   PALETTE,
   RESCUE,
   RESOURCES,
+  RESPAWN,
   SAVE,
   SHIP,
   TANK,
@@ -30,6 +31,7 @@ import { nearestInRange, type ResourceKind, type ResourceNode } from '../systems
 import { SAVE_VERSION, browserStorage, clampTank, clearSave, hasSave, loadSave, writeSave, type SaveData, type SavedDrop } from '../systems/save';
 import { UPGRADE_EFFECTS, computeStats, type TankStats } from '../systems/stats';
 import { build, service, type ActionResult, type ServiceAction, type TankStatus } from '../systems/workshop';
+import { dueForRespawn } from '../systems/respawn';
 import { generateWorld, type World } from '../systems/worldgen';
 
 type Keys = Record<'up' | 'down' | 'left' | 'right' | 'interact' | 'one' | 'two', Phaser.Input.Keyboard.Key>;
@@ -98,6 +100,7 @@ export class GameScene extends Phaser.Scene {
   /** True once the low-fuel beep has played, until refueled. */
   private fuelWarned = false;
   private shells!: Phaser.Physics.Arcade.Group;
+  private droneGroup!: Phaser.Physics.Arcade.Group;
   private dustDistance = 0;
   private lastFired = -Infinity;
   private invulnUntil = 0;
@@ -131,7 +134,8 @@ export class GameScene extends Phaser.Scene {
     this.drones.clear();
     this.collected.clear();
     this.destroyed.clear();
-    for (const e of save?.collected ?? []) this.collected.set(e.id, e.at);
+    const worldIds = new Set(this.world.resources.map((n) => n.id));
+    for (const e of save?.collected ?? []) if (worldIds.has(e.id)) this.collected.set(e.id, e.at);
     for (const e of save?.destroyed ?? []) this.destroyed.set(e.id, e.at);
     this.lastFired = -Infinity;
     this.invulnUntil = 0;
@@ -208,7 +212,7 @@ export class GameScene extends Phaser.Scene {
     this.tank = new Tank(this, start.x, start.y);
     this.physics.add.collider(this.tank.hull, solids);
 
-    const droneGroup = this.physics.add.group();
+    const droneGroup = (this.droneGroup = this.physics.add.group());
     for (const p of this.world.drones) if (!this.destroyed.has(p.id)) this.drones.set(p.id, new Drone(this, p, droneGroup));
     this.physics.add.collider(droneGroup, solids);
     this.physics.add.collider(droneGroup, droneGroup);
@@ -236,6 +240,8 @@ export class GameScene extends Phaser.Scene {
     this.keys.interact.on('down', keyOnce(() => this.interact()));
     this.keys.one.on('down', keyOnce(() => this.workshopOpen && this.workshopService('refuel')));
     this.keys.two.on('down', keyOnce(() => this.workshopOpen && this.workshopService('repair')));
+
+    this.time.addEvent({ delay: RESPAWN.checkMs, loop: true, callback: () => this.respawn() });
 
     // Autosave on a timer and when the page is hidden or closed.
     this.time.addEvent({ delay: SAVE.autosaveMs, loop: true, callback: () => this.save() });
@@ -393,7 +399,35 @@ export class GameScene extends Phaser.Scene {
     return save;
   }
 
-  private addResourceNode(node: ResourceNode) {
+  /** Regrows salvage and returns drones whose time has come, as long as the tank isn't right there. */
+  respawn() {
+    const t = this.tank;
+    for (const id of dueForRespawn(this.collected, this.playTimeMs, RESPAWN.salvageMs)) {
+      const node = this.world.resources.find((n) => n.id === id);
+      if (!node) {
+        this.collected.delete(id);
+        continue;
+      }
+      if (Math.hypot(t.x - node.x, t.y - node.y) < RESPAWN.salvageClearance) continue;
+      this.collected.delete(id);
+      this.addResourceNode(node, true);
+    }
+    for (const id of dueForRespawn(this.destroyed, this.playTimeMs, RESPAWN.droneMs)) {
+      const p = this.world.drones.find((d) => d.id === id);
+      if (!p) {
+        this.destroyed.delete(id);
+        continue;
+      }
+      if (Math.hypot(t.x - p.x, t.y - p.y) < RESPAWN.droneClearance) continue;
+      this.destroyed.delete(id);
+      const drone = new Drone(this, p, this.droneGroup);
+      this.drones.set(id, drone);
+      drone.sprite.setAlpha(0);
+      this.tweens.add({ targets: drone.sprite, alpha: 1, duration: 600 });
+    }
+  }
+
+  private addResourceNode(node: ResourceNode, fadeIn = false) {
     let glow: Phaser.GameObjects.Image | undefined;
     if (node.kind === 'crystal') {
       glow = this.add.image(node.x, node.y, 'glow').setDepth(2);
@@ -401,6 +435,10 @@ export class GameScene extends Phaser.Scene {
     }
     const sprite = this.add.image(node.x, node.y, node.kind).setRotation(node.angle).setDepth(4);
     this.resources.set(node.id, { node, sprite, glow });
+    if (fadeIn) {
+      sprite.setAlpha(0);
+      this.tweens.add({ targets: sprite, alpha: 1, duration: 800 });
+    }
   }
 
   private interact() {
@@ -423,7 +461,8 @@ export class GameScene extends Phaser.Scene {
   private collect(node: ResourceNode) {
     const entry = this.resources.get(node.id)!;
     this.resources.delete(node.id);
-    this.collected.set(node.id, this.playTimeMs);
+    // World nodes regrow later; drone drops are one-offs.
+    if (!node.dropped) this.collected.set(node.id, this.playTimeMs);
     this.nearby = undefined;
     this.inventory = addResource(this.inventory, node.kind, node.amount);
     sfx.play('pickup');
@@ -496,11 +535,13 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.shake(120, 0.004);
     sfx.play('explode');
 
-    // Every drone leaves a circuit; some also leave scrap.
+    // Every drone leaves a circuit; some also leave scrap. Ids include the
+    // kill time so a respawned drone's drops never clash with earlier ones.
     const at = { x: Math.round(x), y: Math.round(y) };
     const side = p.drop > 0 ? 9 : 0;
-    this.addResourceNode({ id: `${p.id}-chip`, kind: 'circuit', amount: 1, x: at.x + side, y: at.y, angle: 0, dropped: true });
-    if (p.drop > 0) this.addResourceNode({ id: `${p.id}-drop`, kind: 'scrap', amount: p.drop, x: at.x - side, y: at.y, angle: 0, dropped: true });
+    const kill = `${p.id}@${Math.round(this.playTimeMs)}`;
+    this.addResourceNode({ id: `${kill}-chip`, kind: 'circuit', amount: 1, x: at.x + side, y: at.y, angle: 0, dropped: true });
+    if (p.drop > 0) this.addResourceNode({ id: `${kill}-drop`, kind: 'scrap', amount: p.drop, x: at.x - side, y: at.y, angle: 0, dropped: true });
   }
 
   private onDroneContact(drone: Drone) {

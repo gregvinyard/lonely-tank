@@ -27,7 +27,10 @@ describe('generateWorld resources', () => {
       expect(Math.hypot(n.x - center.x, n.y - center.y)).toBeGreaterThanOrEqual(opts.minDistance);
       expect(Math.hypot(n.x - center.x, n.y - center.y)).toBeGreaterThan(SHIP.safeRadius);
       expect(n.amount).toBeGreaterThanOrEqual(opts.minAmount);
-      expect(n.amount).toBeLessThanOrEqual(opts.maxAmount);
+      // Nodes far from the ship hold a bonus unit.
+      const far = Math.hypot(n.x - center.x, n.y - center.y) >= RESOURCES.outerBonus.distance;
+      expect(n.amount).toBeLessThanOrEqual(opts.maxAmount + (far ? RESOURCES.outerBonus.amount : 0));
+      if (far) expect(n.amount).toBeGreaterThan(opts.minAmount);
       expect(n.x).toBeGreaterThan(0);
       expect(n.x).toBeLessThan(WORLD_SIZE);
       expect(n.y).toBeGreaterThan(0);

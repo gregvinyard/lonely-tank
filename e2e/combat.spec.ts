@@ -35,7 +35,7 @@ test('holding the mouse fires shells that destroy a drone and leave salvage', as
   await page.waitForFunction(`!${SCENE}.drones.has('${drone.id}')`, null, { timeout: 5000 });
   await page.mouse.up();
 
-  expect(await page.evaluate(`${SCENE}.resources.has('${drone.id}-drop')`)).toBe(true);
+  expect(await page.evaluate(`[...${SCENE}.resources.keys()].some((k) => k.startsWith('${drone.id}@') && k.endsWith('-drop'))`)).toBe(true);
 });
 
 test('fire rate is limited by the cooldown', async ({ page }) => {

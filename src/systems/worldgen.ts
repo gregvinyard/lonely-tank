@@ -2,6 +2,7 @@ import { createRng, randRange } from './rng';
 import { DRONES, OBSTACLES, RESOURCES, SHIP, WORLD_SIZE } from '../data/tuning';
 import { placeDrones, type DronePlacement } from './drone';
 import { placeResources, type ResourceNode } from './resources';
+import { outerBonus } from './respawn';
 
 export interface RockPlacement {
   x: number;
@@ -123,7 +124,9 @@ export function generateWorld(seed: number): World {
   // the camera scrolls (fractional positions round at different moments and jiggle).
   const snap = <T extends { x: number; y: number }>(p: T): T => ({ ...p, x: Math.round(p.x), y: Math.round(p.y) });
   const snappedRocks = rocks.map(snap);
-  const snappedResources = resources.map(snap);
+  const snappedResources = resources
+    .map(snap)
+    .map((n) => ({ ...n, amount: n.amount + outerBonus(Math.hypot(n.x - center.x, n.y - center.y), RESOURCES.outerBonus) }));
   const snappedDrones = drones.map(snap);
 
   const sizes = sizeRocks(snappedRocks, {

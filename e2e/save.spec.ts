@@ -23,14 +23,15 @@ test('progress survives a reload', async ({ page }) => {
     page,
     `(() => {
       const s = ${SCENE};
+      const dropOf = (s, drone, suffix) => [...s.resources.values()].find((r) => r.node.id.startsWith(drone + '@') && r.node.id.endsWith(suffix));
       const [a, b] = [...s.drones.values()].filter((d) => d.placement.drop > 0);
       s.destroyDrone(a);
       s.destroyDrone(b);
       const node = s.world.resources[0];
       s.collect(s.resources.get(node.id).node);
-      s.collect(s.resources.get(a.placement.id + '-drop').node);
-      s.collect(s.resources.get(a.placement.id + '-chip').node);
-      const chip = s.resources.get(b.placement.id + '-chip').node;
+      s.collect(dropOf(s, a.placement.id, '-drop').node);
+      s.collect(dropOf(s, a.placement.id, '-chip').node);
+      const chip = dropOf(s, b.placement.id, '-chip').node;
       s.inventory = { scrap: 9, crystal: 3, circuit: 2 };
       return { node: node.id, picked: a.placement.id, left: b.placement.id, chip: { x: chip.x, y: chip.y } };
     })()`,
@@ -54,11 +55,12 @@ test('progress survives a reload', async ({ page }) => {
     page,
     `(() => {
       const s = ${SCENE};
-      const chip = s.resources.get('${setup.left}-chip');
+      const dropOf = (s, drone, suffix) => [...s.resources.values()].find((r) => r.node.id.startsWith(drone + '@') && r.node.id.endsWith(suffix));
+      const chip = dropOf(s, '${setup.left}', '-chip');
       return {
         node: s.resources.has('${setup.node}'),
-        pickedDrops: s.resources.has('${setup.picked}-drop') || s.resources.has('${setup.picked}-chip'),
-        leftScrap: s.resources.has('${setup.left}-drop'),
+        pickedDrops: !!(dropOf(s, '${setup.picked}', '-drop') || dropOf(s, '${setup.picked}', '-chip')),
+        leftScrap: !!dropOf(s, '${setup.left}', '-drop'),
         chip: chip ? { x: chip.node.x, y: chip.node.y, kind: chip.node.kind } : null,
         drones: s.drones.size,
         plating: s.levels.plating,

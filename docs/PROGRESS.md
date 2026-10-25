@@ -96,9 +96,17 @@ Developer feedback: good; rocks needed size variety and jiggled while moving (fi
 
 **Verified:** typecheck ✅, 97 unit tests ✅, 30 browser tests ✅ (adds: services, keyboard and mouse building, locked lines, measurable effects, field repair, reload with upgrades/circuits/drops, v0.1 save migration).
 
+## M8 — Economy ✅
+
+- Salvage regrows after 4 minutes of play time (not next to the tank); drones return after 5 minutes (not while the tank is near their home). Both survive reloads.
+- Drone drops get unique ids per kill.
+- Outer salvage (800 px+ from the ship) holds one more unit.
+
+**Verified:** typecheck ✅, 99 unit tests ✅, 34 browser tests ✅ (adds: salvage regrowth and its clearance, drone return and fresh drop ids, timers across reload, play time paused).
+
 ## Next
 
-- M8 — Economy: respawning salvage and drones, distance-scaled amounts.
+- M9 — Balance and polish.
 
 ## Known issues
 

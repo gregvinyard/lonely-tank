@@ -118,6 +118,15 @@ Numbers live in `FUEL`, `WORKSHOP` and `SAVE` in `src/data/tuning.ts`.
 - **Workshop screen:** services (refuel, repair), a 4×2 grid of cards (icon + tier pips: teal built, amber next when affordable, faded icon when locked), a detail pane (tier, next effect, cost with red numbers when short, requirement) and a Build button.
 - **Save v2:** upgrade levels, circuits, play time, collected/destroyed entries with the play time they happened, drops with their kind. v1 saves are migrated (plating flag → Plating 1; everything collected/destroyed at time 0).
 
+## Economy (v0.2 M8)
+
+- Numbers in `RESPAWN` and `RESOURCES.outerBonus` (`src/data/tuning.ts`).
+- **Salvage regrows** at the same spot 4 minutes of play time after it was collected, checked once a second, but never within 260 px of the tank. It fades in.
+- **Drones return** to their home 5 minutes of play time after being destroyed, but not while the tank is within 320 px of that home. They fade in and patrol as before.
+- **Drops** from destroyed drones are one-offs: their ids include the kill time (`drone-03@123456-chip`), they're saved with their position until picked up, and they don't regrow.
+- **Outer bonus:** scrap and crystal nodes 800 px or more from the ship hold one extra unit.
+- **Play time** only advances while the Game scene runs (not paused) and counts at most 250 ms per frame, so a tab returning from the background doesn't fast-forward respawns.
+
 ## Debug
 
 - Add `?debug` to the URL to draw physics bodies.

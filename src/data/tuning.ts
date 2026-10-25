@@ -74,6 +74,16 @@ export const RESOURCES = {
   rockClearance: 48, // px between a resource and a rock center
   minSpacing: 64, // px between resources
   interactRange: 44, // px from the tank's center
+  // Salvage far from the ship holds a little more.
+  outerBonus: { distance: 800, amount: 1 },
+} as const;
+
+export const RESPAWN = {
+  salvageMs: 4 * 60_000, // play time before a collected node regrows
+  salvageClearance: 260, // px; never regrows right next to the tank
+  droneMs: 5 * 60_000, // play time before a destroyed drone returns
+  droneClearance: 320, // px from its home; well outside its detection range
+  checkMs: 1000,
 } as const;
 
 export const HULL = {

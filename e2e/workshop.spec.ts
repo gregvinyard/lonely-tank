@@ -104,7 +104,7 @@ test('upgrades change how the tank drives and shoots', async ({ page }) => {
   // One AP shell destroys a drone (3 hp).
   const id = await read<string>(page, `(() => { const s = ${SCENE}; const d = [...s.drones.values()][0]; s.onShellHit({ active: true, x: d.x, y: d.y, destroy() {} }, d); return d.placement.id; })()`);
   expect(await read<boolean>(page, `${SCENE}.drones.has('${id}')`)).toBe(false);
-  expect(await read<boolean>(page, `${SCENE}.resources.has('${id}-chip')`)).toBe(true);
+  expect(await read<boolean>(page, `[...${SCENE}.resources.keys()].some((k) => k.startsWith('${id}@') && k.endsWith('-chip'))`)).toBe(true);
 });
 
 test('field repair mends the hull at rest, after a calm period', async ({ page }) => {
