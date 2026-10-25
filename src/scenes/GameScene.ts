@@ -23,7 +23,7 @@ import { applyDamage, canFire, rescuePenalty } from '../systems/combat';
 import { burnFuel } from '../systems/fuel';
 import { addResource, createInventory, type Inventory } from '../systems/inventory';
 import { nearestInRange, type ResourceKind, type ResourceNode } from '../systems/resources';
-import { SAVE_VERSION, browserStorage, clampTank, clearSave, loadSave, writeSave, type SaveData } from '../systems/save';
+import { SAVE_VERSION, browserStorage, clampTank, clearSave, hasSave, loadSave, writeSave, type SaveData } from '../systems/save';
 import { applyAction, maxHullFor, type TankStatus, type WorkshopAction, type WorkshopTuning } from '../systems/workshop';
 import { generateWorld, type World } from '../systems/worldgen';
 
@@ -316,7 +316,7 @@ export class GameScene extends Phaser.Scene {
       return undefined;
     }
     const save = loadSave(storage, SAVE.key);
-    if (!save && storage.getItem(SAVE.key) !== null) console.warn('Lonely Tank: ignoring an unreadable save and starting fresh.');
+    if (!save && hasSave(storage, SAVE.key)) console.warn('Lonely Tank: ignoring an unreadable save and starting fresh.');
     return save;
   }
 

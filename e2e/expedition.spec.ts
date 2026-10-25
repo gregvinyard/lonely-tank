@@ -133,8 +133,15 @@ test('progress survives a reload', async ({ page }) => {
   expect(await read<boolean>(page, `${SCENE}.plating`)).toBe(true);
   await press(page, 'e');
 
-  // Leave the ship; closing the page saves the tank where it is.
-  await page.evaluate(`(() => { const s = ${SCENE}; s.tank.reset(700, 820); s.hull = 64; s.fuel = 37.5; })()`);
+  // Leave the dock (staying in the safe zone, away from drones); closing the page saves the tank where it is.
+  const parked = await read<{ x: number; y: number }>(page, `(() => {
+    const s = ${SCENE};
+    const p = { x: s.world.center.x + 170, y: s.world.center.y };
+    s.tank.reset(p.x, p.y);
+    s.hull = 64;
+    s.fuel = 37.5;
+    return p;
+  })()`);
   await page.waitForTimeout(100);
   await page.reload();
   await page.waitForFunction(`${SCENE}?.scene.isActive() && ${HUD}?.scene.isActive()`);
@@ -174,8 +181,8 @@ test('progress survives a reload', async ({ page }) => {
     hull: 64,
     fuel: 37.5,
     inventory: { scrap: 1, crystal: 1 },
-    x: 700,
-    y: 820,
+    x: parked.x,
+    y: parked.y,
     goal: 'PLATING INSTALLED · EXPLORE FREELY',
   });
 });

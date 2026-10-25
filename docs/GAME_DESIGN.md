@@ -86,7 +86,7 @@ Numbers live in `FUEL`, `WORKSHOP` and `SAVE` in `src/data/tuning.ts`.
 - **Objective:** the goal strip tracks progress (`scrap 3/8 crystal 0/2`), then says to return to the ship, then that the plating is installed.
 - **Save:** localStorage key `lonely-tank.save`, schema version 1. Stores the world seed, tank position/hull/fuel, inventory, collected resource ids, destroyed drone ids, uncollected drone drops (with positions) and the plating flag. Max hull is derived from the plating flag, never stored.
   - Saved on reaching the ship, on opening the workshop, after every successful workshop action, after a rescue, every 15 s, and when the page is hidden or closed.
-  - Missing, corrupted or other-version saves are ignored (with a console warning) and a new game starts; storage errors never stop the game. Loaded values are clamped (position inside the world, hull 1..max, fuel 0..max).
+  - Missing, corrupted or other-version saves are ignored (with a console warning) and a new game starts; storage errors never stop the game. Loaded values are clamped (position inside the world, hull 1..max, fuel 1..max).
   - Drones always restart at home on load.
 
 ## Debug

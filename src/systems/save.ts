@@ -46,6 +46,15 @@ export function loadSave(storage: Storage, key: string): SaveData | undefined {
   }
 }
 
+/** True if anything is stored under `key`, valid or not. Never throws. */
+export function hasSave(storage: Storage, key: string): boolean {
+  try {
+    return storage.getItem(key) !== null;
+  } catch {
+    return false;
+  }
+}
+
 /** Writes the save; returns false if storage is unavailable or full. Never throws. */
 export function writeSave(storage: Storage, key: string, data: SaveData): boolean {
   try {
@@ -113,13 +122,13 @@ function isDrop(v: unknown): v is SavedDrop {
   return isObj(v) && typeof v.id === 'string' && isCount(v.amount) && (v.amount as number) > 0 && isNum(v.x) && isNum(v.y);
 }
 
-/** Brings saved tank values into range: inside the world, hull 1..max, fuel 0..max. */
+/** Brings saved tank values into range: inside the world, hull 1..max, fuel 1..max (an empty tank would trigger a rescue on load). */
 export function clampTank(t: SaveData['tank'], maxHull: number, maxFuel: number, worldSize: number, margin: number): SaveData['tank'] {
   const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
   return {
     x: clamp(t.x, margin, worldSize - margin),
     y: clamp(t.y, margin, worldSize - margin),
     hull: clamp(Math.round(t.hull), 1, maxHull),
-    fuel: clamp(t.fuel, 0, maxFuel),
+    fuel: clamp(t.fuel, 1, maxFuel),
   };
 }

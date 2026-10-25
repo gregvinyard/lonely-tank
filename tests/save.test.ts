@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SAVE_VERSION, clampTank, clearSave, loadSave, parseSave, writeSave, type SaveData } from '../src/systems/save';
+import { SAVE_VERSION, clampTank, clearSave, hasSave, loadSave, parseSave, writeSave, type SaveData } from '../src/systems/save';
 
 const good: SaveData = {
   version: SAVE_VERSION,
@@ -64,12 +64,13 @@ describe('save', () => {
     };
     const broken = { getItem: fail, setItem: fail, removeItem: fail };
     expect(loadSave(broken, 'k')).toBeUndefined();
+    expect(hasSave(broken, 'k')).toBe(false);
     expect(writeSave(broken, 'k', good)).toBe(false);
     expect(() => clearSave(broken, 'k')).not.toThrow();
   });
 
   it('clamps tank values into range', () => {
     expect(clampTank({ x: -50, y: 5000, hull: 0, fuel: 150 }, 125, 100, 2048, 20)).toEqual({ x: 20, y: 2028, hull: 1, fuel: 100 });
-    expect(clampTank({ x: 500, y: 600, hull: 200, fuel: -3 }, 100, 100, 2048, 20)).toEqual({ x: 500, y: 600, hull: 100, fuel: 0 });
+    expect(clampTank({ x: 500, y: 600, hull: 200, fuel: -3 }, 100, 100, 2048, 20)).toEqual({ x: 500, y: 600, hull: 100, fuel: 1 });
   });
 });
