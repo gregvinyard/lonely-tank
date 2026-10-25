@@ -138,7 +138,7 @@ Numbers live in `FUEL`, `WORKSHOP` and `SAVE` in `src/data/tuning.ts`.
 
 All numbers live in `BURROWERS` in `src/data/tuning.ts`; logic in `src/systems/burrower.ts` (pure, unit tested), visuals in `src/entities/Burrower.ts`.
 
-- **Placement:** 5 (`burrower-00`…), 620 px or more from the ship, clear of rocks, drone homes and salvage. They're placed last from seed + 5, so the v0.2 world layout and existing saves are unchanged.
+- **Placement:** 5 (`burrower-00`…), 500 px or more from the ship, clear of rocks, drone homes and salvage. They're placed last from seed + 5, so the v0.2 world layout and existing saves are unchanged.
 - **Underground:** shown only as a sand mound. While tunnelling it leaves small mounds every 9 px that fade over 3.2 s (pooled, whole-pixel positions, not drawn over rocks). It passes under rocks and has no physics body. Shells fly over it and it can't hurt the tank.
 - **Senses:** feels a moving tank within 260 px, a stopped one within 130 px. It ignores a tank in the safe zone, and gives up beyond 340 px from the tank or 520 px from home.
 - **Attack:**
