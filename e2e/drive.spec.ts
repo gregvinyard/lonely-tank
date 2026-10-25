@@ -46,12 +46,12 @@ test('rocks block the tank', async ({ page }) => {
     const t = scene.tank.hull;
     const rocks = Array.from(scene.physics.world.staticBodies as Set<any>)
       .filter((b: any) => b.gameObject.texture.key.startsWith('rock'))
-      .map((b: any) => b.center);
+      .map((b: any) => ({ x: b.center.x, y: b.center.y, radius: b.radius }));
     rocks.sort((a: any, b: any) => Math.hypot(a.x - t.x, a.y - t.y) - Math.hypot(b.x - t.x, b.y - t.y));
     const r = rocks[0];
     // Teleport onto a straight horizontal line 120px left of the rock.
     t.body.reset(r.x - 120, r.y);
-    return { x: r.x, y: r.y };
+    return r;
   });
 
   await page.keyboard.down('d');
@@ -59,6 +59,6 @@ test('rocks block the tank', async ({ page }) => {
   await page.keyboard.up('d');
 
   const s = await tankState(page);
-  // Rock radius 22 + tank radius 20 => centers can't get closer than ~42px.
-  expect(target.x - s.x).toBeGreaterThan(38);
+  // Rock radius + tank radius 20 => centers can't get much closer than that.
+  expect(target.x - s.x).toBeGreaterThan(target.radius + 20 - 4);
 });

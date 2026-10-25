@@ -66,13 +66,13 @@ Developer feedback: good; slow fuel use is fine for a casual exploration game.
 
 ## M5 — Small Polish Pass ✅ (awaiting playtest)
 
-- PixelLab art: ground tile (seeded mirrored layout) and three boulder variants.
+- PixelLab art: ground tile (seeded mirrored layout) and rocks in three sizes (2 small, 3 medium, 2 large).
 - Synthesized sound effects with a remembered mute (M).
 - Turret recoil, red hit flash, low-hull smoke.
 - Pause (Esc/P) with the full controls list; low-fuel and hull-critical warnings; shorter hint that fades.
-- Fixed: rock and ship collision circles were offset from their art; same-frame key presses could be handled twice; right-click menu over the game.
+- Fixed: rock and ship collision circles were offset from their art; rocks jiggled while the camera moved (fractional positions); same-frame key presses could be handled twice; right-click menu over the game.
 
-**Verified:** typecheck ✅, 80 unit tests ✅, 24 browser tests ✅ (adds: pause freezes drones/fuel/tank, Esc with the workshop open, mute survives reload, art loads from files with centered rock collision).
+**Verified:** typecheck ✅, 84 unit tests ✅, 24 browser tests ✅ (adds: pause freezes drones/fuel/tank, Esc with the workshop open, mute survives reload, art loads from files with centered rock collision).
 
 ## Next
 

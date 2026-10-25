@@ -48,7 +48,14 @@ export function zoomForViewport(height: number): number {
 
 export const OBSTACLES = {
   rockCount: 70,
-  rockRadius: 22, // collision circle, px
+  // Collision radius and share of each rock size. Sizes are assigned after
+  // placement; a rock without room for its size is made smaller.
+  sizes: {
+    small: { radius: 12, weight: 0.3 },
+    medium: { radius: 22, weight: 0.4 },
+    large: { radius: 36, weight: 0.3 },
+  },
+  sizeGap: 10, // px kept between a rock's edge and other rocks, resources, drone homes and the spawn
   clearRadius: 220, // keep the spawn area around the world center open
   minSpacing: 80, // px between rock centers
 } as const;

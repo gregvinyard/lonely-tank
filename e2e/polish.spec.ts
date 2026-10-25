@@ -75,13 +75,13 @@ test('ground and rock art load from files and rocks collide where they are drawn
       const rocks = [...s.physics.world.staticBodies].filter((b) => b.gameObject.texture.key.startsWith('rock'));
       return {
         // Loaded PNGs are images; placeholders are canvases drawn at boot.
-        sources: ['terrain_ground', 'rock', 'rock_2', 'rock_3'].map((k) => (src(k) instanceof HTMLImageElement ? 'png' : 'placeholder')),
+        sources: ['terrain_ground', 'rock', 'rock_2', 'rock_3', 'rock_s1', 'rock_s2', 'rock_l1', 'rock_l2'].map((k) => (src(k) instanceof HTMLImageElement ? 'png' : 'placeholder')),
         variants: [...new Set(rocks.map((b) => b.gameObject.texture.key))].sort(),
         offCenter: Math.max(...rocks.map((b) => Math.hypot(b.center.x - b.gameObject.x, b.center.y - b.gameObject.y))),
       };
     })()`,
   );
-  expect(r.sources).toEqual(['png', 'png', 'png', 'png']);
-  expect(r.variants).toEqual(['rock', 'rock_2', 'rock_3']);
+  expect(r.sources).toEqual(Array(8).fill('png'));
+  expect(r.variants).toEqual(['rock', 'rock_2', 'rock_3', 'rock_l1', 'rock_l2', 'rock_s1', 'rock_s2']);
   expect(r.offCenter).toBeLessThan(0.5);
 });

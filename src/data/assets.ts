@@ -1,6 +1,7 @@
 import type * as Phaser from 'phaser';
 import { PALETTE } from './tuning';
 import { createRng } from '../systems/rng';
+import type { RockSize } from '../systems/worldgen';
 
 // Centralized asset manifest.
 //
@@ -18,13 +19,19 @@ export interface AssetDef {
   placeholder: (g: Phaser.GameObjects.Graphics, w: number, h: number) => void;
 }
 
-export const ROCK_KEYS = ['rock', 'rock_2', 'rock_3'] as const;
+/** Boulder art by size; the canvas is square with the rock centered. */
+export const ROCK_VARIANTS: Record<RockSize, { keys: string[]; size: number }> = {
+  small: { keys: ['rock_s1', 'rock_s2'], size: 32 },
+  medium: { keys: ['rock', 'rock_2', 'rock_3'], size: 64 },
+  large: { keys: ['rock_l1', 'rock_l2'], size: 96 },
+};
 
-function drawRockPlaceholder(g: Phaser.GameObjects.Graphics) {
-  g.fillStyle(0x000000, 0.25).fillEllipse(34, 38, 52, 40);
-  g.fillStyle(0x5a4a5e).fillCircle(32, 32, 24);
-  g.fillStyle(0x705d73).fillCircle(28, 27, 17);
-  g.fillStyle(0x8a7590).fillCircle(24, 22, 7);
+function drawRockPlaceholder(g: Phaser.GameObjects.Graphics, w: number) {
+  const k = w / 64;
+  g.fillStyle(0x000000, 0.25).fillEllipse(34 * k, 38 * k, 52 * k, 40 * k);
+  g.fillStyle(0x5a4a5e).fillCircle(32 * k, 32 * k, 24 * k);
+  g.fillStyle(0x705d73).fillCircle(28 * k, 27 * k, 17 * k);
+  g.fillStyle(0x8a7590).fillCircle(24 * k, 22 * k, 7 * k);
 }
 
 export const ASSETS: AssetDef[] = [
@@ -79,14 +86,16 @@ export const ASSETS: AssetDef[] = [
   },
   // Boulders, lit from the top-left like the other sprites, so they're only
   // ever flipped, never rotated. The variant is picked per rock from its seed.
-  ...ROCK_KEYS.map(
-    (key): AssetDef => ({
-      key,
-      width: 64,
-      height: 64,
-      file: `assets/${key}.png`,
-      placeholder: drawRockPlaceholder,
-    }),
+  ...Object.values(ROCK_VARIANTS).flatMap(({ keys, size }) =>
+    keys.map(
+      (key): AssetDef => ({
+        key,
+        width: size,
+        height: size,
+        file: `assets/${key}.png`,
+        placeholder: drawRockPlaceholder,
+      }),
+    ),
   ),
   {
     // Crashed ship, nose pointing up-right. Collision is a circle at the center.

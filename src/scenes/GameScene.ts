@@ -18,7 +18,7 @@ import {
   frameLerp,
 } from '../data/tuning';
 import { sfx } from '../audio/sfx';
-import { ROCK_KEYS } from '../data/assets';
+import { ROCK_VARIANTS } from '../data/assets';
 import { Drone } from '../entities/Drone';
 import { Tank } from '../entities/Tank';
 import { keyOnce } from '../input/keyOnce';
@@ -137,10 +137,11 @@ export class GameScene extends Phaser.Scene {
     const solids = this.physics.add.staticGroup();
     for (const r of this.world.rocks) {
       // The lighting is baked in, so vary rocks by variant and mirroring, not rotation.
-      const v = rockVariant(r.angle);
-      const rock = solids.create(r.x, r.y, ROCK_KEYS[v.index]) as Phaser.Physics.Arcade.Image;
+      const keys = ROCK_VARIANTS[r.size].keys;
+      const v = rockVariant(r.angle, keys.length);
+      const rock = solids.create(r.x, r.y, keys[v.index]) as Phaser.Physics.Arcade.Image;
       rock.setFlipX(v.flip).setDepth(5);
-      setCircleBody(rock, OBSTACLES.rockRadius);
+      setCircleBody(rock, OBSTACLES.sizes[r.size].radius);
     }
     // Scorched crash site under the ship.
     this.add.ellipse(center.x - 8, center.y + 4, 150, 80, 0x2a1a14, 0.35).setDepth(1);
@@ -525,10 +526,10 @@ export class GameScene extends Phaser.Scene {
 }
 
 /** Picks a rock's art variant and mirroring from its seeded angle, so the world stays deterministic. */
-function rockVariant(angle: number): { index: number; flip: boolean } {
+function rockVariant(angle: number, count: number): { index: number; flip: boolean } {
   const u = (((angle / (Math.PI * 2)) % 1) + 1) % 1;
-  const slot = Math.floor(u * ROCK_KEYS.length * 2);
-  return { index: slot % ROCK_KEYS.length, flip: slot >= ROCK_KEYS.length };
+  const slot = Math.floor(u * count * 2);
+  return { index: slot % count, flip: slot >= count };
 }
 
 /** Centers a circular static body on its sprite. */

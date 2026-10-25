@@ -91,7 +91,9 @@ Numbers live in `FUEL`, `WORKSHOP` and `SAVE` in `src/data/tuning.ts`.
 
 ## Polish (M5)
 
-- **Art:** PixelLab ground and three boulder variants. Rocks are mirrored but never rotated, because their lighting is baked in.
+- **Art:** PixelLab ground and seven rock images in three sizes. Rocks are mirrored but never rotated, because their lighting is baked in.
+- **Rock sizes:** small (collision radius 12), medium (22), large (36), weighted 30/40/30. Sizes are assigned after placement (seed + 4) and a rock without room for its size (10 px clear of other rocks, resources, drone homes and the spawn) is made smaller, so positions and resource ids are unchanged and saves stay valid.
+- **Whole-pixel positions:** rocks, resources and drone homes are rounded to whole pixels at generation. Fractional positions rounded to the screen grid at different moments than the ground as the camera moved, so rocks visibly jiggled.
 - **Feedback:** turret recoil (3 px, whole pixels), a red flash on the tank when hit, dark smoke while hull is at or below 30%.
 - **Sound:** synthesized effects (see `ART_REQUESTS.md`); M mutes and is remembered.
 - **Pause:** Esc or P pauses the game (drones, fuel, autosave timer all stop) and shows the full controls list. With the workshop open, Esc only closes it.
