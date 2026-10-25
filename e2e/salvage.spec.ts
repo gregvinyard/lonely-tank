@@ -10,7 +10,7 @@ async function state(page: Page) {
       inventory: s.inventory,
       remaining: s.resources.size,
       nearby: s.nearby && s.nearby.id,
-      prompt: hud.prompt.visible ? hud.prompt.text : null,
+      prompt: hud.prompt.visible ? hud.promptText.text : null,
       compass: hud.compassLabel.visible,
     };
   })()`) as Promise<{ inventory: { scrap: number; crystal: number }; remaining: number; nearby?: string; prompt: string | null; compass: boolean }>;
@@ -43,7 +43,7 @@ test('driving onto a resource and pressing E salvages it', async ({ page }) => {
     await page.waitForFunction(`window.__LT_GAME__.scene.getScene('Hud').prompt.visible`);
 
     const before = await state(page);
-    expect(before.prompt).toContain('[E] Salvage');
+    expect(before.prompt).toContain('[E] SALVAGE');
 
     await page.keyboard.press('e');
     await page.waitForTimeout(100);

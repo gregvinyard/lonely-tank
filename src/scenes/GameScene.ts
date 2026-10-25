@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { CAMERA, OBSTACLES, PALETTE, RESOURCES, SHIP, WORLD_SEED, WORLD_SIZE, frameLerp, zoomForViewport } from '../data/tuning';
+import { CAMERA, OBSTACLES, PALETTE, RESOURCES, SHIP, WORLD_SEED, WORLD_SIZE, frameLerp } from '../data/tuning';
 import { Tank } from '../entities/Tank';
 import { addResource, createInventory, type Inventory } from '../systems/inventory';
 import { nearestInRange, type ResourceKind, type ResourceNode } from '../systems/resources';
@@ -86,10 +86,6 @@ export class GameScene extends Phaser.Scene {
     const cam = this.cameras.main;
     cam.setBounds(0, 0, WORLD_SIZE, WORLD_SIZE);
     cam.startFollow(this.tank.hull, true, CAMERA.lerp, CAMERA.lerp);
-    const applyZoom = () => cam.setZoom(zoomForViewport(this.scale.height));
-    applyZoom();
-    this.scale.on(Phaser.Scale.Events.RESIZE, applyZoom);
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.scale.off(Phaser.Scale.Events.RESIZE, applyZoom));
 
     const kb = this.input.keyboard!;
     this.keys = kb.addKeys({ up: 'W', down: 'S', left: 'A', right: 'D', interact: 'E' }) as Keys;

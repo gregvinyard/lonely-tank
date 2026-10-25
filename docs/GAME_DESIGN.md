@@ -10,11 +10,12 @@ Living notes on what's actually implemented and decided. The original spec is in
 
 ## Rendering
 
-- WebGL renderer, `pixelArt: true` (nearest-neighbor, no antialiasing).
-- Canvas fills the browser window (`Scale.RESIZE`).
-- Camera zoom is a whole number chosen from the window height (~400 world px visible vertically): 1080p → 3×, 720p → 2×. Keeps pixels crisp.
+- WebGL renderer, `pixelArt: true` (nearest-neighbor, no antialiasing, positions rounded to whole pixels).
+- **Pixel lock:** the whole game (world, particles and HUD) renders at a low virtual resolution, and the canvas is scaled up by a whole number of *device* pixels (`src/main.ts`). Everything shares one pixel grid, including rotated sprites. The scale is picked so ~400 game pixels fit vertically: 720p → 2×, 1080p → 3×, 1440p → 4×, 4K → 5×. Accounts for OS display scaling (`devicePixelRatio`).
+- Cameras run at zoom 1; the HUD is laid out in game pixels.
+- HUD text uses a built-in 5×7 pixel font (`src/data/pixelFont.ts`, registered as a RetroFont at boot), uppercase only.
 - `render.maxTextures: 1` works around a Phaser 4.2.1 batching bug (see `src/main.ts`).
-- The HUD is a separate scene (`Hud`) so it isn't affected by camera zoom.
+- The HUD is a separate scene (`Hud`) drawn over the Game scene.
 
 ## Tank (M1)
 

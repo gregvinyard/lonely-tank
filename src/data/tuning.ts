@@ -29,9 +29,11 @@ export const TANK = {
 
 export const CAMERA = {
   lerp: 0.12, // fraction of the gap closed per 60 Hz frame; lower = floatier follow
-  // Integer zoom is picked so roughly this many world pixels fit vertically.
+  // The whole game is drawn at a low resolution and scaled up by a whole
+  // number of device pixels, picked so roughly this many game pixels fit
+  // vertically (1080p -> 3x, 1440p -> 4x, 4K -> 5x).
   targetViewHeight: 400,
-  maxZoom: 4,
+  maxZoom: 8,
 } as const;
 
 /** Converts the 60 Hz follow lerp into the equivalent for a frame of `deltaMs`. */
@@ -39,7 +41,7 @@ export function frameLerp(lerpAt60: number, deltaMs: number): number {
   return 1 - Math.pow(1 - lerpAt60, deltaMs / (1000 / 60));
 }
 
-/** Whole-number zoom keeps pixel art crisp at any window size. */
+/** Whole-number scale (device pixels per game pixel) for a window `height` in device pixels. */
 export function zoomForViewport(height: number): number {
   return Math.min(CAMERA.maxZoom, Math.max(1, Math.round(height / CAMERA.targetViewHeight)));
 }

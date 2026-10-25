@@ -2,7 +2,23 @@ import * as Phaser from 'phaser';
 import { BootScene } from './scenes/BootScene';
 import { GameScene } from './scenes/GameScene';
 import { HudScene } from './scenes/HudScene';
-import { PALETTE } from './data/tuning';
+import { PALETTE, zoomForViewport } from './data/tuning';
+
+// Pixel lock: the whole game renders at a low virtual resolution and the
+// canvas is scaled up by a whole number, so world art, particles and HUD all
+// share one pixel grid.
+// The scale is a whole number of *device* pixels, so it stays crisp with
+// Windows/OS display scaling (devicePixelRatio 1.25, 1.5, ...).
+function virtualSize() {
+  const dpr = window.devicePixelRatio || 1;
+  const devicePixelsPerPixel = zoomForViewport(window.innerHeight * dpr);
+  return {
+    zoom: devicePixelsPerPixel / dpr, // CSS px per game pixel
+    width: Math.ceil((window.innerWidth * dpr) / devicePixelsPerPixel),
+    height: Math.ceil((window.innerHeight * dpr) / devicePixelsPerPixel),
+  };
+}
+const initial = virtualSize();
 
 const game = new Phaser.Game({
   type: Phaser.WEBGL,
@@ -18,9 +34,10 @@ const game = new Phaser.Game({
     maxTextures: 1,
   },
   scale: {
-    mode: Phaser.Scale.RESIZE,
-    width: '100%',
-    height: '100%',
+    mode: Phaser.Scale.NONE,
+    width: initial.width,
+    height: initial.height,
+    zoom: initial.zoom,
   },
   physics: {
     default: 'arcade',
@@ -29,6 +46,12 @@ const game = new Phaser.Game({
     arcade: { debug: false, fixedStep: false },
   },
   scene: [BootScene, GameScene, HudScene],
+});
+
+window.addEventListener('resize', () => {
+  const { zoom, width, height } = virtualSize();
+  game.scale.setZoom(zoom);
+  game.scale.resize(width, height);
 });
 
 // Exposed for automated browser smoke tests and debugging.

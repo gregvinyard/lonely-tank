@@ -68,7 +68,8 @@ describe('zoomForViewport', () => {
     expect(zoomForViewport(300)).toBe(1);
     expect(zoomForViewport(720)).toBe(2);
     expect(zoomForViewport(1080)).toBe(3);
-    expect(zoomForViewport(5000)).toBe(4);
+    expect(zoomForViewport(2160)).toBe(5);
+    expect(zoomForViewport(10000)).toBe(8);
   });
 });
 

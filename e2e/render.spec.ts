@@ -49,7 +49,9 @@ test('turret renders completely over the hull while driving', async ({ page }) =
 
     const [sx, sy] = (await page.evaluate(`(() => {
       const s = ${game}.scene.getScene('Game'); const c = s.cameras.main;
-      return [(s.tank.x - c.worldView.x) * c.zoom, (s.tank.y - c.worldView.y) * c.zoom];
+      // Game pixels -> CSS pixels: the whole canvas is scaled by game.scale.zoom.
+      const z = ${game}.scale.zoom;
+      return [(s.tank.x - c.worldView.x) * z, (s.tank.y - c.worldView.y) * z];
     })()`)) as [number, number];
     const clip = { x: Math.round(sx) - 70, y: Math.round(sy) - 70, width: 140, height: 140 };
 
