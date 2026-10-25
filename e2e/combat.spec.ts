@@ -75,6 +75,69 @@ test('a drone ramming a nearly destroyed tank triggers a rescue with salvage los
   expect(await page.evaluate(`${GAME}.scene.getScene('Hud').banner.visible`)).toBe(true);
 });
 
+test('a drone shot from beyond its detection range hunts the tank down', async ({ page }) => {
+  const r = (await page.evaluate(`(async () => {
+    const s = ${SCENE};
+    const c = s.world.center;
+    // A drone with open ground toward the far side from the ship.
+    const d = [...s.drones.values()][0];
+    d.hp = 99;
+    const a = Math.atan2(d.y - c.y, d.x - c.x);
+    s.tank.reset(d.x - Math.cos(a) * 330, d.y - Math.sin(a) * 330);
+    s.tank.update = () => {};
+    s.hull = 9999;
+    const start = Math.hypot(d.x - s.tank.x, d.y - s.tank.y);
+    await new Promise((r) => setTimeout(r, 300));
+    const ignored = d.brain.mode;
+    s.onShellHit({ active: true, x: d.x, y: d.y, destroy() {} }, d);
+    // The hit knocks it back first; then it closes in at chase speed.
+    await new Promise((r) => setTimeout(r, 2000));
+    return { start, ignored, mode: d.brain.mode, now: Math.hypot(d.x - s.tank.x, d.y - s.tank.y) };
+  })()`)) as { start: number; ignored: string; mode: string; now: number };
+  expect(r.start).toBeGreaterThan(300);
+  expect(r.ignored).not.toBe('chase');
+  expect(r.mode).toBe('chase');
+  expect(r.now).toBeLessThan(r.start - 60);
+});
+
+test('a drone steers around a big rock to reach the tank', async ({ page }) => {
+  const r = (await page.evaluate(`(async () => {
+    const s = ${SCENE};
+    const c = s.world.center;
+    const R = { small: 12, medium: 22, large: 36 };
+    // A large rock with clear ground on two opposite sides, away from the ship.
+    let pick;
+    for (const rock of s.world.rocks.filter((o) => o.size === 'large')) {
+      const open = (p) =>
+        Math.hypot(p.x - c.x, p.y - c.y) > 360 &&
+        p.x > 60 && p.y > 60 && p.x < 1988 && p.y < 1988 &&
+        s.world.rocks.every((o) => o === rock || Math.hypot(p.x - o.x, p.y - o.y) > R[o.size] + 30);
+      for (const a of [0, Math.PI / 2, Math.PI / 4, -Math.PI / 4]) {
+        const k = R.large + 34;
+        const p1 = { x: rock.x - Math.cos(a) * k, y: rock.y - Math.sin(a) * k };
+        const p2 = { x: rock.x + Math.cos(a) * k, y: rock.y + Math.sin(a) * k };
+        if (open(p1) && open(p2)) { pick = { rock, p1, p2 }; break; }
+      }
+      if (pick) break;
+    }
+    const d = [...s.drones.values()][0];
+    for (const o of s.drones.values()) if (o !== d) o.update = () => o.sprite.body.setVelocity(0, 0);
+    d.sprite.body.reset(pick.p1.x, pick.p1.y);
+    s.tank.reset(pick.p2.x, pick.p2.y);
+    s.tank.update = () => {};
+    s.hull = 9999;
+    d.alert();
+    let closest = Infinity;
+    for (let i = 0; i < 120 && closest > 44; i++) {
+      await new Promise((r) => setTimeout(r, 50));
+      closest = Math.min(closest, Math.hypot(d.x - s.tank.x, d.y - s.tank.y));
+    }
+    return { closest, rock: pick.rock };
+  })()`)) as { closest: number };
+  // Touching = tank radius 20 + drone radius 12.
+  expect(r.closest).toBeLessThanOrEqual(44);
+});
+
 test('drones never enter the safe zone', async ({ page }) => {
   // Lure a drone at the zone edge, then sit inside: it must stay out.
   const inside = (await page.evaluate(`(async () => {

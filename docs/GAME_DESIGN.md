@@ -66,6 +66,8 @@ All numbers live in `HULL`, `CANNON`, `DRONES` and `RESCUE` in `src/data/tuning.
 - **Drones:** 10, placed deterministically with stable ids (`drone-00`…). Each patrols within 120 px of its home, idling between waypoints at 36 px/s.
   - Chases the tank within 200 px at 95 px/s (the tank does 160, so you can always outrun one).
   - Gives up beyond 300 px from the tank, 420 px from home, or when the tank enters the safe zone, then returns home.
+  - **Shot drones** hunt the tank for 8 s from any range (leash 900 px), and drones within 260 px of them join in. Each hit refreshes it. The safe zone still calms them (v0.3).
+  - **Steering** (v0.3): drones bend around rocks and the ship, treating touching rocks as one wall, and stick to one side until they're past. A drone that barely moves for 0.7 s while trying sidesteps 70 px for 0.9 s; a patrolling one picks a new waypoint. Patrol waypoints are never inside rocks. Pure logic in `src/systems/steer.ts`, simulated on the real map in `tests/steer.test.ts`.
   - Never enters the ship's safe zone: homes are placed so the patrol area is outside it, and positions are clamped as a backstop.
   - 3 hits to destroy. White flash and knockback on hit; sparks, dust and a small camera shake on death.
   - 60% leave 1–2 scrap (decided at world generation; the drop has id `<drone id>-drop`).

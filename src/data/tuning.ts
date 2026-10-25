@@ -113,6 +113,16 @@ export const DRONES = {
   detectRadius: 200,
   loseRadius: 300,
   leashRadius: 420, // give up a chase this far from home
+  // Shot drones hunt the shooter for a while, from any range, and wake their neighbours.
+  alertMs: 8000,
+  alertLeash: 900,
+  alertShare: 260, // px; drones this close to a shot one join in
+  // Steering around rocks.
+  lookahead: 90, // px ahead checked for rocks in the way
+  obstacleMargin: 4, // px of extra clearance around rocks
+  stuckAfterMs: 700, // barely moving this long counts as stuck
+  detourMs: 900,
+  detourDistance: 70,
   contactDamage: 10,
   knockback: 220, // px/sec pushed away from the tank on contact or hit
   scrapDropChance: 0.6,

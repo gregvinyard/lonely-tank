@@ -112,9 +112,16 @@ Developer feedback: good; rocks needed size variety and jiggled while moving (fi
 
 **Verified:** typecheck ✅, 101 unit tests ✅, 36 browser tests ✅ (adds: whole-tree build, clicks on the closed workshop do nothing, every asset PNG loads), locally and live.
 
+## M10 — Smarter drones ✅ (v0.3, `docs/SPEC_v0.3.md`)
+
+- Drones steer around rocks and the ship (touching rocks count as one wall) and commit to a side, so they no longer stall on rocks. A stalled drone sidesteps; a patrolling one picks a new waypoint; waypoints avoid rocks.
+- A shot drone hunts the tank for 8 s from any range and wakes drones within 260 px. The safe zone and rescues calm them.
+
+**Verified:** typecheck ✅, 113 unit tests ✅ (adds steering, real-map chase and return-home simulations, alerts), 38 browser tests ✅ (adds: long-range shot provokes a drone, a drone gets around a big rock).
+
 ## Next
 
-- Developer playtest of v0.2.
+- M11 — Burrowers.
 
 ## Known issues
 

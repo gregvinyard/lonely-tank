@@ -32,6 +32,7 @@ import { SAVE_VERSION, browserStorage, clampTank, clearSave, hasSave, loadSave, 
 import { UPGRADE_EFFECTS, computeStats, type TankStats } from '../systems/stats';
 import { build, service, type ActionResult, type ServiceAction, type TankStatus } from '../systems/workshop';
 import { dueForRespawn } from '../systems/respawn';
+import type { Circle } from '../systems/steer';
 import { generateWorld, type World } from '../systems/worldgen';
 
 type Keys = Record<'up' | 'down' | 'left' | 'right' | 'interact' | 'one' | 'two', Phaser.Input.Keyboard.Key>;
@@ -101,6 +102,8 @@ export class GameScene extends Phaser.Scene {
   private fuelWarned = false;
   private shells!: Phaser.Physics.Arcade.Group;
   private droneGroup!: Phaser.Physics.Arcade.Group;
+  /** Rocks and the ship, grown by a drone's radius, for steering. */
+  private droneObstacles: Circle[] = [];
   private dustDistance = 0;
   private lastFired = -Infinity;
   private invulnUntil = 0;
@@ -212,6 +215,11 @@ export class GameScene extends Phaser.Scene {
     this.tank = new Tank(this, start.x, start.y);
     this.physics.add.collider(this.tank.hull, solids);
 
+    const grow = DRONES.bodyRadius + DRONES.obstacleMargin;
+    this.droneObstacles = [
+      ...this.world.rocks.map((r) => ({ x: r.x, y: r.y, r: OBSTACLES.sizes[r.size].radius + grow })),
+      { x: center.x, y: center.y, r: SHIP.bodyRadius + grow },
+    ];
     const droneGroup = (this.droneGroup = this.physics.add.group());
     for (const p of this.world.drones) if (!this.destroyed.has(p.id)) this.drones.set(p.id, new Drone(this, p, droneGroup));
     this.physics.add.collider(droneGroup, solids);
@@ -307,7 +315,7 @@ export class GameScene extends Phaser.Scene {
     this.docked = docked;
     if (!docked) this.workshopOpen = false;
 
-    for (const d of this.drones.values()) d.update(time, delta, this.tank, this.inSafeZone, c, SHIP.safeRadius);
+    for (const d of this.drones.values()) d.update(time, delta, this.tank, this.inSafeZone, c, SHIP.safeRadius, this.droneObstacles);
 
     for (const s of this.shells.getChildren() as Phaser.Physics.Arcade.Image[]) {
       if (time - (s.getData('born') as number) > st.shellLifetimeMs) s.destroy();
@@ -521,6 +529,10 @@ export class GameScene extends Phaser.Scene {
     this.impact(shell);
     if (drone.hit(this.stats.damage, this.tank, this.time.now)) this.destroyDrone(drone);
     else sfx.play('hit');
+    // A shot wakes the drone and its neighbours, however far away the tank is.
+    for (const d of this.drones.values()) {
+      if (Math.hypot(d.x - drone.x, d.y - drone.y) <= DRONES.alertShare) d.alert();
+    }
   }
 
   private destroyDrone(drone: Drone) {
@@ -574,7 +586,7 @@ export class GameScene extends Phaser.Scene {
 
     const { spawn } = this.world;
     this.tank.reset(spawn.x, spawn.y);
-    for (const d of this.drones.values()) d.brain = { ...d.brain, mode: 'return' };
+    for (const d of this.drones.values()) d.calm();
 
     // Jump the camera instead of letting the follow smoothing cross the map.
     const cam = this.cameras.main;

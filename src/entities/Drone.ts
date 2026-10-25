@@ -1,11 +1,12 @@
 import * as Phaser from 'phaser';
 import { DRONES } from '../data/tuning';
-import { clampOutsideCircle, stepDrone, type DroneBrain, type DronePlacement, type Vec } from '../systems/drone';
+import { alertBrain, calmBrain, clampOutsideCircle, newBrain, stepDrone, type DroneBrain, type DronePlacement, type Vec } from '../systems/drone';
 import { createRng } from '../systems/rng';
+import type { Circle } from '../systems/steer';
 
 // A hostile sentry drone. It hovers (a bobbing ground shadow, so the sprite
 // itself never scales or rotates off the pixel grid), patrols around its home,
-// and chases the tank when it comes close.
+// and chases the tank when it comes close or shoots it, steering around rocks.
 export class Drone {
   readonly sprite: Phaser.Physics.Arcade.Image;
   readonly placement: DronePlacement;
@@ -16,6 +17,7 @@ export class Drone {
   private readonly rng: () => number;
   private knockedUntil = 0;
   private bobPhase: number;
+  private last: Vec;
 
   constructor(scene: Phaser.Scene, p: DronePlacement, group: Phaser.Physics.Arcade.Group) {
     this.placement = p;
@@ -29,7 +31,8 @@ export class Drone {
     this.body.setCollideWorldBounds(true);
     this.sprite.setData('drone', this);
 
-    this.brain = { mode: 'patrol', home: { x: p.x, y: p.y }, waypoint: { x: p.x, y: p.y }, waitMs: 0 };
+    this.brain = newBrain(p);
+    this.last = { x: p.x, y: p.y };
     // Per-drone stream so patrols don't depend on frame timing of other drones.
     this.rng = createRng(hashId(p.id));
     this.bobPhase = this.rng() * Math.PI * 2;
@@ -43,12 +46,11 @@ export class Drone {
     return this.sprite.y;
   }
 
-  update(now: number, dtMs: number, player: Vec, playerSafe: boolean, safeCenter: Vec, safeRadius: number) {
-    const { brain, velocity } = stepDrone(
-      this.brain,
-      { pos: { x: this.x, y: this.y }, player, playerSafe, dtMs, rng: this.rng },
-      DRONES,
-    );
+  update(now: number, dtMs: number, player: Vec, playerSafe: boolean, safeCenter: Vec, safeRadius: number, obstacles: readonly Circle[]) {
+    const pos = { x: this.x, y: this.y };
+    const speed = dtMs > 0 ? (Math.hypot(pos.x - this.last.x, pos.y - this.last.y) * 1000) / dtMs : 0;
+    this.last = pos;
+    const { brain, velocity } = stepDrone(this.brain, { pos, player, playerSafe, dtMs, rng: this.rng, obstacles, speed }, DRONES);
     this.brain = brain;
     if (now >= this.knockedUntil) this.body.setVelocity(velocity.x, velocity.y);
 
@@ -59,6 +61,16 @@ export class Drone {
 
     this.bobPhase += dtMs / 260;
     this.shadow.setPosition(this.x, this.y + 15 + Math.round(Math.sin(this.bobPhase)));
+  }
+
+  /** Hunts the player for a while, from any range. */
+  alert() {
+    this.brain = alertBrain(this.brain, DRONES.alertMs);
+  }
+
+  /** Forgets the player and heads home. */
+  calm() {
+    this.brain = calmBrain(this.brain);
   }
 
   /** Pushes the drone away from a point for a moment. */
