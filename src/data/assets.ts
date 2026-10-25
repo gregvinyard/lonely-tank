@@ -219,11 +219,12 @@ export const ASSETS: AssetDef[] = [
   {
     // Soft dust puff kicked up by the treads.
     key: 'dust',
-    width: 8,
-    height: 8,
+    width: 10,
+    height: 10,
     placeholder: (g) => {
-      g.fillStyle(PALETTE.sandLight, 0.5).fillCircle(4, 4, 4);
-      g.fillStyle(PALETTE.sandLight, 0.8).fillCircle(4, 4, 2);
+      // Pale enough to read against the PixelLab sand.
+      g.fillStyle(0xead6b8, 0.75).fillCircle(5, 5, 5);
+      g.fillStyle(0xfaf0e0, 1).fillCircle(5, 5, 3);
     },
   },
 ];

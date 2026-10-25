@@ -156,9 +156,9 @@ export class GameScene extends Phaser.Scene {
 
     this.dust = this.add.particles(0, 0, 'dust', {
       emitting: false,
-      lifespan: 600,
+      lifespan: 750,
       speed: { min: 4, max: 14 },
-      alpha: { start: 0.6, end: 0 },
+      alpha: { start: 0.85, end: 0 },
     });
     this.dust.setDepth(8);
     this.sparks = this.add.particles(0, 0, 'spark', {
@@ -510,7 +510,7 @@ export class GameScene extends Phaser.Scene {
     const speed = this.tank.speed;
     if (speed < 20) return;
     this.dustDistance += (speed * delta) / 1000;
-    if (this.dustDistance < 14) return;
+    if (this.dustDistance < 9) return;
     this.dustDistance = 0;
 
     // Puff from both rear tread corners.
