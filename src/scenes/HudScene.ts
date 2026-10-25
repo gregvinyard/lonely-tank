@@ -1,5 +1,7 @@
 import * as Phaser from 'phaser';
+import { sfx } from '../audio/sfx';
 import { FONT_KEY, toFontText } from '../data/pixelFont';
+import { keyOnce } from '../input/keyOnce';
 import { FUEL, HULL, PALETTE, WORKSHOP } from '../data/tuning';
 import { compassPlacement } from '../systems/compass';
 import type { Inventory } from '../systems/inventory';
@@ -22,6 +24,16 @@ const BAR_W = 48;
 const BAR_X = 35;
 const LABELS: Record<ResourceKind, string> = { scrap: 'Scrap', crystal: 'Crystal' };
 const WORKSHOP_W = 228;
+const HINT_MS = 45000; // the short controls hint fades after this; the pause screen lists them all
+const CONTROLS: [string, string][] = [
+  ['WASD', 'Drive'],
+  ['Mouse', 'Aim turret'],
+  ['Left click', 'Fire (hold)'],
+  ['E', 'Salvage / workshop'],
+  ['1 2 3', 'Workshop actions'],
+  ['M', 'Sound on/off'],
+  ['Esc / P', 'Pause'],
+];
 const WORKSHOP_H = 118;
 
 interface Bar {
@@ -63,6 +75,10 @@ export class HudScene extends Phaser.Scene {
   workshop!: Phaser.GameObjects.Container;
   private rows: WorkshopRow[] = [];
   workshopMessage!: Phaser.GameObjects.BitmapText;
+  pauseMenu!: Phaser.GameObjects.Container;
+  private warning!: ReturnType<HudScene['box']>;
+  private toast!: ReturnType<HudScene['box']>;
+  private toastTimer?: Phaser.Time.TimerEvent;
 
   constructor() {
     super('Hud');
@@ -71,6 +87,7 @@ export class HudScene extends Phaser.Scene {
   create() {
     this.game_ = this.scene.get('Game') as GameScene;
     this.shownHull = -1;
+    this.paused = false;
 
     this.panel = this.add.rectangle(4, 4, 0, 60, 0x000000, 0.55).setOrigin(0, 0);
     this.text(9, 9, 'Hull');
@@ -91,13 +108,23 @@ export class HudScene extends Phaser.Scene {
     this.prompt.setVisible(false);
 
     this.safeZone = this.box('Home base · safe zone', COLOR.accent).container;
-    this.hint = this.box('WASD drive · mouse aim · click fire · E salvage/workshop', COLOR.text).container;
+    this.hint = this.box('WASD drive · mouse aim · click fire · E use · Esc pause', COLOR.text).container;
+    this.time.delayedCall(HINT_MS, () => this.tweens.add({ targets: this.hint, alpha: 0, duration: 800 }));
+    this.warning = this.box('', COLOR.danger);
+    this.toast = this.box('', COLOR.text);
+    this.toast.container.setVisible(false);
     this.compass = this.add.graphics();
     ({ container: this.compassLabel, text: this.compassText } = this.box('', COLOR.accent));
 
     this.createWorkshop();
     ({ container: this.banner, text: this.bannerText, bg: this.bannerBg } = this.box('', COLOR.danger, 24));
     this.banner.setVisible(false);
+    this.createPauseMenu();
+
+    const kb = this.input.keyboard!;
+    kb.on('keydown-ESC', keyOnce(() => (this.game_.workshopOpen ? this.game_.closeWorkshop() : this.togglePause())));
+    kb.on('keydown-P', keyOnce(() => !this.game_.workshopOpen && this.togglePause()));
+    kb.on('keydown-M', keyOnce(() => this.showToast(sfx.toggleMute() ? 'Sound off' : 'Sound on')));
 
     const onCollected = (p: CollectedPayload) => this.onCollected(p);
     const onRescued = (p: RescuedPayload) => this.onRescued(p);
@@ -129,6 +156,10 @@ export class HudScene extends Phaser.Scene {
     }
 
     this.safeZone.setVisible(g.inSafeZone && !g.workshopOpen).setPosition(Math.round(width / 2), 10);
+    this.updateWarning(width);
+    this.toast.container.setPosition(width - 4 - Math.round(this.toast.bg.width / 2), 10);
+    this.pauseMenu.setPosition(Math.round(width / 2), Math.round(height / 2));
+    (this.pauseMenu.first as Phaser.GameObjects.Rectangle).setSize(width + 2, height + 2);
     this.hint.setPosition(Math.round(this.hint.width / 2) + 4, height - 10);
     // Below the workshop panel while it's open, otherwise clear of the stats panel.
     const bannerY = g.workshopOpen ? height / 2 + WORKSHOP_H / 2 + 16 : height / 3;
@@ -189,6 +220,59 @@ export class HudScene extends Phaser.Scene {
     this.goal.text.setText(s);
     this.goal.bg.setSize(this.goal.text.width + 8, 13).setOrigin(0.5);
     this.goal.container.setPosition(4 + Math.round(this.goal.bg.width / 2), 73);
+  }
+
+  /** Tracked here because scene.pause() only takes effect on the next step. */
+  paused = false;
+
+  togglePause() {
+    this.paused = !this.paused;
+    if (this.paused) {
+      this.scene.pause('Game');
+    } else {
+      this.scene.resume('Game');
+      // Keys released while paused would otherwise stay held.
+      this.game_.input.keyboard?.resetKeys();
+    }
+    this.pauseMenu.setVisible(this.paused);
+  }
+
+  private createPauseMenu() {
+    const dim = this.add.rectangle(0, 0, 10, 10, 0x000000, 0.55);
+    const panel = this.add.rectangle(0, 0, 200, 128, 0x000000, 0.8).setStrokeStyle(1, COLOR.accent, 0.7);
+    const parts: Phaser.GameObjects.GameObject[] = [dim, panel, this.text(0, -54, 'Paused', COLOR.accent).setOrigin(0.5)];
+    CONTROLS.forEach(([key, what], i) => {
+      const y = -40 + i * 11;
+      parts.push(this.text(-90, y, key, COLOR.text), this.text(-14, y, what, COLOR.dim));
+    });
+    parts.push(this.text(0, 44, 'Progress saves automatically', COLOR.dim).setOrigin(0.5));
+    parts.push(this.text(0, 55, '[Esc] resume', COLOR.text).setOrigin(0.5));
+    this.pauseMenu = this.add.container(0, 0, parts).setVisible(false).setDepth(10);
+  }
+
+  private updateWarning(width: number) {
+    const g = this.game_;
+    let s = '';
+    if (!g.inSafeZone) {
+      if (g.fuel / g.maxFuel <= FUEL.lowFraction) s = 'Low fuel · return to ship';
+      else if (g.hull / g.maxHull <= 0.3) s = 'Hull critical · repair at ship';
+    }
+    this.warning.container.setVisible(!!s);
+    if (!s) return;
+    const text = toFontText(s);
+    if (this.warning.text.text !== text) {
+      this.warning.text.setText(text);
+      this.warning.bg.setSize(this.warning.text.width + 8, 13).setOrigin(0.5);
+    }
+    this.warning.container.setPosition(Math.round(width / 2), 10);
+  }
+
+  private showToast(message: string) {
+    this.toast.text.setText(toFontText(message));
+    this.toast.bg.setSize(this.toast.text.width + 8, 13).setOrigin(0.5);
+    this.toast.container.setVisible(true);
+    this.toastTimer?.remove();
+    this.toastTimer = this.time.delayedCall(1500, () => this.toast.container.setVisible(false));
   }
 
   private createWorkshop() {

@@ -1,6 +1,10 @@
 import * as Phaser from 'phaser';
 import { ASSETS } from '../data/assets';
+import { createRng } from '../systems/rng';
 import { CELL_H, CELL_W, FONT_CHARS, FONT_COLS, FONT_KEY, fontPixels } from '../data/pixelFont';
+
+const TERRAIN_TILES = 8; // 256 px repeat
+const TERRAIN_SEED = 4242;
 
 // Loads any supplied PNGs from the manifest, then generates placeholder
 // textures for everything that is missing.
@@ -26,8 +30,29 @@ export class BootScene extends Phaser.Scene {
       g.generateTexture(a.key, a.width, a.height);
       g.destroy();
     }
+    this.createTerrain();
     this.createPixelFont();
     this.scene.start('Game');
+  }
+
+  /** Lays the ground tile out with seeded flips so the repeat doesn't show. */
+  private createTerrain() {
+    const src = this.textures.get('terrain_ground').getSourceImage() as CanvasImageSource;
+    const tile = 32;
+    const n = TERRAIN_TILES;
+    const tex = this.textures.createCanvas('terrain', tile * n, tile * n)!;
+    const ctx = tex.getContext();
+    const rng = createRng(TERRAIN_SEED);
+    for (let y = 0; y < n; y++) {
+      for (let x = 0; x < n; x++) {
+        const fx = rng() < 0.5 ? -1 : 1;
+        const fy = rng() < 0.5 ? -1 : 1;
+        ctx.setTransform(fx, 0, 0, fy, x * tile + (fx < 0 ? tile : 0), y * tile + (fy < 0 ? tile : 0));
+        ctx.drawImage(src, 0, 0, tile, tile);
+      }
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    tex.refresh();
   }
 
   private createPixelFont() {

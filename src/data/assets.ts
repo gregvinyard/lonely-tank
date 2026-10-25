@@ -18,11 +18,23 @@ export interface AssetDef {
   placeholder: (g: Phaser.GameObjects.Graphics, w: number, h: number) => void;
 }
 
+export const ROCK_KEYS = ['rock', 'rock_2', 'rock_3'] as const;
+
+function drawRockPlaceholder(g: Phaser.GameObjects.Graphics) {
+  g.fillStyle(0x000000, 0.25).fillEllipse(34, 38, 52, 40);
+  g.fillStyle(0x5a4a5e).fillCircle(32, 32, 24);
+  g.fillStyle(0x705d73).fillCircle(28, 27, 17);
+  g.fillStyle(0x8a7590).fillCircle(24, 22, 7);
+}
+
 export const ASSETS: AssetDef[] = [
   {
+    // One seamless sand tile; BootScene lays it out with seeded flips into the
+    // larger 'terrain' texture so the repeat isn't noticeable.
     key: 'terrain_ground',
     width: 32,
     height: 32,
+    file: 'assets/terrain_ground.png',
     placeholder: (g, w, h) => {
       g.fillStyle(PALETTE.sand).fillRect(0, 0, w, h);
       const rng = createRng(99);
@@ -65,17 +77,17 @@ export const ASSETS: AssetDef[] = [
       g.fillStyle(PALETTE.teal).fillRect(28, 30, 3, 4);
     },
   },
-  {
-    key: 'rock',
-    width: 64,
-    height: 64,
-    placeholder: (g) => {
-      g.fillStyle(0x000000, 0.25).fillEllipse(34, 38, 52, 40);
-      g.fillStyle(0x5a4a5e).fillCircle(32, 32, 24);
-      g.fillStyle(0x705d73).fillCircle(28, 27, 17);
-      g.fillStyle(0x8a7590).fillCircle(24, 22, 7);
-    },
-  },
+  // Boulders, lit from the top-left like the other sprites, so they're only
+  // ever flipped, never rotated. The variant is picked per rock from its seed.
+  ...ROCK_KEYS.map(
+    (key): AssetDef => ({
+      key,
+      width: 64,
+      height: 64,
+      file: `assets/${key}.png`,
+      placeholder: drawRockPlaceholder,
+    }),
+  ),
   {
     // Crashed ship, nose pointing up-right. Collision is a circle at the center.
     key: 'spaceship',

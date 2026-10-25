@@ -53,7 +53,7 @@ Developer feedback: good; asked for everything to share one pixel resolution.
 
 Developer feedback: looks good.
 
-## M4 — Complete Expedition Loop ✅ (awaiting playtest) — v0.1 vertical slice
+## M4 — Complete Expedition Loop ✅ — v0.1 vertical slice
 
 - Fuel: burns while moving, HUD bar with low-fuel warning, rescue when empty.
 - Workshop at the ship (E): refuel (free), repair (3 scrap → +25 hull), craft reinforced plating (8 scrap + 2 crystal → +25 max hull, once). Keys 1/2/3 or click.
@@ -62,12 +62,25 @@ Developer feedback: looks good.
 
 **Verified:** typecheck ✅, 77 unit tests ✅, 20 browser tests ✅ (adds: fuel burn, out-of-fuel rescue, workshop actions incl. click without firing, no driving in the workshop, reload restores collected/destroyed/drops/plating/position, corrupted save starts fresh, `?newgame`).
 
+Developer feedback: good; slow fuel use is fine for a casual exploration game.
+
+## M5 — Small Polish Pass ✅ (awaiting playtest)
+
+- PixelLab art: ground tile (seeded mirrored layout) and three boulder variants.
+- Synthesized sound effects with a remembered mute (M).
+- Turret recoil, red hit flash, low-hull smoke.
+- Pause (Esc/P) with the full controls list; low-fuel and hull-critical warnings; shorter hint that fades.
+- Fixed: rock and ship collision circles were offset from their art; same-frame key presses could be handled twice; right-click menu over the game.
+
+**Verified:** typecheck ✅, 80 unit tests ✅, 24 browser tests ✅ (adds: pause freezes drones/fuel/tank, Esc with the workshop open, mute survives reload, art loads from files with centered rock collision).
+
 ## Next
 
-- Developer playtest of M4, then M5 — small polish pass (remaining PixelLab art such as rocks and ground, tuning).
+- Developer playtest of M5. v0.1 is feature-complete per the spec.
 
 ## Known issues
 
-- Phaser 4.2.1 multi-texture batching bug under software WebGL: parts of the rotated turret went missing. Worked around with `render.maxTextures: 1`; guarded by `e2e/render.spec.ts`. Not reproduced on a real GPU (RTX 5080 / D3D11). Could be reported upstream.
-- Rocks and ground are still code-drawn placeholders.
-- Escape to pause (in the spec's controls table) isn't scheduled in any milestone yet; Esc currently only closes the workshop.
+- Phaser 4.2.1 issues worked around in our code, not yet reported upstream:
+  - Multi-texture batching under software WebGL dropped parts of the rotated turret → `render.maxTextures: 1`; guarded by `e2e/render.spec.ts`. Not reproduced on a real GPU.
+  - `StaticBody.setCircle` stores its offset without moving the body → offset applied with `setOffset`.
+  - Keyboard queue re-dispatched when several keys arrive in one frame → `keyOnce` wrapper.

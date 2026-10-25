@@ -17,8 +17,11 @@ import {
   WORLD_SIZE,
   frameLerp,
 } from '../data/tuning';
+import { sfx } from '../audio/sfx';
+import { ROCK_KEYS } from '../data/assets';
 import { Drone } from '../entities/Drone';
 import { Tank } from '../entities/Tank';
+import { keyOnce } from '../input/keyOnce';
 import { applyDamage, canFire, rescuePenalty } from '../systems/combat';
 import { burnFuel } from '../systems/fuel';
 import { addResource, createInventory, type Inventory } from '../systems/inventory';
@@ -27,7 +30,7 @@ import { SAVE_VERSION, browserStorage, clampTank, clearSave, hasSave, loadSave, 
 import { applyAction, maxHullFor, type TankStatus, type WorkshopAction, type WorkshopTuning } from '../systems/workshop';
 import { generateWorld, type World } from '../systems/worldgen';
 
-type Keys = Record<'up' | 'down' | 'left' | 'right' | 'interact' | 'close' | 'one' | 'two' | 'three', Phaser.Input.Keyboard.Key>;
+type Keys = Record<'up' | 'down' | 'left' | 'right' | 'interact' | 'one' | 'two' | 'three', Phaser.Input.Keyboard.Key>;
 
 export const WORKSHOP_TUNING: WorkshopTuning = { baseHull: HULL.max, repair: WORKSHOP.repair, plating: WORKSHOP.plating };
 
@@ -80,6 +83,10 @@ export class GameScene extends Phaser.Scene {
   private keys!: Keys;
   private dust!: Phaser.GameObjects.Particles.ParticleEmitter;
   private sparks!: Phaser.GameObjects.Particles.ParticleEmitter;
+  private smoke!: Phaser.GameObjects.Particles.ParticleEmitter;
+  private smokeMs = 0;
+  /** True once the low-fuel beep has played, until refueled. */
+  private fuelWarned = false;
   private shells!: Phaser.Physics.Arcade.Group;
   private dustDistance = 0;
   private lastFired = -Infinity;
@@ -113,10 +120,12 @@ export class GameScene extends Phaser.Scene {
     this.docked = false;
     this.workshopOpen = false;
     this.holdFire = false;
+    this.fuelWarned = false;
+    this.smokeMs = 0;
     const { center } = this.world;
 
     this.physics.world.setBounds(0, 0, WORLD_SIZE, WORLD_SIZE);
-    this.add.tileSprite(0, 0, WORLD_SIZE, WORLD_SIZE, 'terrain_ground').setOrigin(0, 0);
+    this.add.tileSprite(0, 0, WORLD_SIZE, WORLD_SIZE, 'terrain').setOrigin(0, 0);
 
     // Faint ring marking the ship's safe zone.
     this.add
@@ -127,8 +136,10 @@ export class GameScene extends Phaser.Scene {
 
     const solids = this.physics.add.staticGroup();
     for (const r of this.world.rocks) {
-      const rock = solids.create(r.x, r.y, 'rock') as Phaser.Physics.Arcade.Image;
-      rock.setRotation(r.angle).setDepth(5);
+      // The lighting is baked in, so vary rocks by variant and mirroring, not rotation.
+      const v = rockVariant(r.angle);
+      const rock = solids.create(r.x, r.y, ROCK_KEYS[v.index]) as Phaser.Physics.Arcade.Image;
+      rock.setFlipX(v.flip).setDepth(5);
       setCircleBody(rock, OBSTACLES.rockRadius);
     }
     // Scorched crash site under the ship.
@@ -156,6 +167,16 @@ export class GameScene extends Phaser.Scene {
       alpha: { start: 1, end: 0 },
     });
     this.sparks.setDepth(14);
+    // Dark smoke from a badly damaged tank.
+    this.smoke = this.add.particles(0, 0, 'dust', {
+      emitting: false,
+      lifespan: 900,
+      speedY: { min: -18, max: -8 },
+      speedX: { min: -5, max: 5 },
+      alpha: { start: 0.7, end: 0 },
+      tint: 0x2a2224,
+    });
+    this.smoke.setDepth(15);
 
     let start = { x: this.world.spawn.x, y: this.world.spawn.y };
     if (save) {
@@ -189,16 +210,14 @@ export class GameScene extends Phaser.Scene {
       left: 'A',
       right: 'D',
       interact: 'E',
-      close: 'ESC',
       one: 'ONE',
       two: 'TWO',
       three: 'THREE',
     }) as Keys;
-    this.keys.interact.on('down', () => this.interact());
-    this.keys.close.on('down', () => this.closeWorkshop());
-    this.keys.one.on('down', () => this.workshopOpen && this.workshopAction('refuel'));
-    this.keys.two.on('down', () => this.workshopOpen && this.workshopAction('repair'));
-    this.keys.three.on('down', () => this.workshopOpen && this.workshopAction('plating'));
+    this.keys.interact.on('down', keyOnce(() => this.interact()));
+    this.keys.one.on('down', keyOnce(() => this.workshopOpen && this.workshopAction('refuel')));
+    this.keys.two.on('down', keyOnce(() => this.workshopOpen && this.workshopAction('repair')));
+    this.keys.three.on('down', keyOnce(() => this.workshopOpen && this.workshopAction('plating')));
 
     // Autosave on a timer and when the page is hidden or closed.
     this.time.addEvent({ delay: SAVE.autosaveMs, loop: true, callback: () => this.save() });
@@ -211,6 +230,7 @@ export class GameScene extends Phaser.Scene {
       window.removeEventListener('pagehide', onPageHide);
     });
 
+    this.input.mouse?.disableContextMenu();
     this.scene.launch('Hud');
 
     if (new URLSearchParams(location.search).has('debug')) {
@@ -246,7 +266,11 @@ export class GameScene extends Phaser.Scene {
     this.emitDust(delta);
 
     this.fuel = burnFuel(this.fuel, this.tank.speed, TANK.maxSpeed, delta, FUEL.perSecond);
+    const lowFuel = this.fuel / this.maxFuel <= FUEL.lowFraction;
+    if (lowFuel && !this.fuelWarned) sfx.play('lowFuel');
+    this.fuelWarned = lowFuel;
     if (this.fuel <= 0) this.rescue('fuel');
+    this.emitSmoke(delta);
 
     const c = this.world.center;
     const fromShip = Math.hypot(this.tank.x - c.x, this.tank.y - c.y);
@@ -279,6 +303,7 @@ export class GameScene extends Phaser.Scene {
       ({ hull: this.hull, fuel: this.fuel, inventory: this.inventory, plating: this.plating } = result.status);
       this.save();
     }
+    sfx.play(!result.ok ? 'deny' : action === 'plating' ? 'craft' : 'ok');
     this.game.events.emit(WORKSHOP_EVENT, { action, ok: result.ok, message: result.message } satisfies WorkshopPayload);
   }
 
@@ -336,11 +361,12 @@ export class GameScene extends Phaser.Scene {
     if (node) return this.collect(node);
     if (this.docked) {
       this.workshopOpen = true;
+      sfx.play('open');
       this.save();
     }
   }
 
-  private closeWorkshop() {
+  closeWorkshop() {
     if (!this.workshopOpen) return;
     this.workshopOpen = false;
     this.holdFire = true;
@@ -352,6 +378,7 @@ export class GameScene extends Phaser.Scene {
     this.collected.add(node.id);
     this.nearby = undefined;
     this.inventory = addResource(this.inventory, node.kind, node.amount);
+    sfx.play('pickup');
 
     if (entry.glow) {
       this.tweens.killTweensOf(entry.glow);
@@ -392,10 +419,13 @@ export class GameScene extends Phaser.Scene {
 
     const flash = this.add.image(mx, my, 'flash').setDepth(13);
     this.time.delayedCall(50, () => flash.destroy());
+    this.tank.recoil();
+    sfx.play('fire');
   }
 
   private impact(shell: Phaser.Physics.Arcade.Image) {
     this.sparks.explode(5, shell.x, shell.y);
+    sfx.play('impact');
     shell.destroy();
   }
 
@@ -403,6 +433,7 @@ export class GameScene extends Phaser.Scene {
     if (!shell.active || !this.drones.has(drone.placement.id)) return;
     this.impact(shell);
     if (drone.hit(CANNON.damage, this.tank, this.time.now)) this.destroyDrone(drone);
+    else sfx.play('hit');
   }
 
   private destroyDrone(drone: Drone) {
@@ -415,6 +446,7 @@ export class GameScene extends Phaser.Scene {
     this.sparks.explode(18, x, y);
     for (let i = 0; i < 6; i++) this.dust.emitParticleAt(x + Phaser.Math.Between(-8, 8), y + Phaser.Math.Between(-8, 8), 1);
     this.cameras.main.shake(120, 0.004);
+    sfx.play('explode');
 
     if (p.drop > 0) {
       this.addResourceNode({ id: `${p.id}-drop`, kind: 'scrap', amount: p.drop, x: Math.round(x), y: Math.round(y), angle: 0 });
@@ -430,6 +462,13 @@ export class GameScene extends Phaser.Scene {
     this.hull = applyDamage(this.hull, DRONES.contactDamage);
     this.cameras.main.shake(150, 0.006);
     this.sparks.explode(8, (this.tank.x + drone.x) / 2, (this.tank.y + drone.y) / 2);
+    sfx.play('hurt');
+    // Brief red flash on the tank itself.
+    for (const part of [this.tank.hull, this.tank.turret]) part.setTint(0xff5040).setTintMode(Phaser.TintModes.FILL);
+    this.time.delayedCall(90, () => {
+      this.tank.hull.clearTint();
+      this.tank.turret.clearTint();
+    });
     if (this.hull <= 0) this.rescue('destroyed');
   }
 
@@ -453,7 +492,17 @@ export class GameScene extends Phaser.Scene {
     cam.fadeIn(500, 0, 0, 0);
 
     this.save();
+    sfx.play('rescue');
     this.game.events.emit(RESCUED_EVENT, { reason, lost } satisfies RescuedPayload);
+  }
+
+  /** Puffs of smoke while the hull is low. */
+  private emitSmoke(delta: number) {
+    if (this.hull / this.maxHull > 0.3) return;
+    this.smokeMs += delta;
+    if (this.smokeMs < 140) return;
+    this.smokeMs = 0;
+    this.smoke.emitParticleAt(this.tank.x + Phaser.Math.Between(-6, 6), this.tank.y + Phaser.Math.Between(-6, 6), 1);
   }
 
   private emitDust(delta: number) {
@@ -475,9 +524,19 @@ export class GameScene extends Phaser.Scene {
   }
 }
 
+/** Picks a rock's art variant and mirroring from its seeded angle, so the world stays deterministic. */
+function rockVariant(angle: number): { index: number; flip: boolean } {
+  const u = (((angle / (Math.PI * 2)) % 1) + 1) % 1;
+  const slot = Math.floor(u * ROCK_KEYS.length * 2);
+  return { index: slot % ROCK_KEYS.length, flip: slot >= ROCK_KEYS.length };
+}
+
+/** Centers a circular static body on its sprite. */
 function setCircleBody(img: Phaser.Physics.Arcade.Image, radius: number) {
   const body = img.body as Phaser.Physics.Arcade.StaticBody;
-  body.setCircle(radius, img.width / 2 - radius, img.height / 2 - radius);
+  // StaticBody.setCircle stores an offset without moving the body by it;
+  // setOffset does move it, so apply the offset separately.
+  body.setCircle(radius).setOffset(img.width / 2 - radius, img.height / 2 - radius);
 }
 
 function droneOf(obj: unknown): Drone {

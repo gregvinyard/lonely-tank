@@ -1,4 +1,5 @@
 import * as Phaser from 'phaser';
+import { sfx } from './audio/sfx';
 import { BootScene } from './scenes/BootScene';
 import { GameScene } from './scenes/GameScene';
 import { HudScene } from './scenes/HudScene';
@@ -53,6 +54,9 @@ window.addEventListener('resize', () => {
   game.scale.setZoom(zoom);
   game.scale.resize(width, height);
 });
+
+// Browsers only allow audio after a user gesture.
+for (const type of ['pointerdown', 'keydown'] as const) window.addEventListener(type, () => sfx.unlock(), { passive: true });
 
 // Exposed for automated browser smoke tests and debugging.
 (window as unknown as { __LT_GAME__: Phaser.Game }).__LT_GAME__ = game;

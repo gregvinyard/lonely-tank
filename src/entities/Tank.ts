@@ -8,6 +8,8 @@ export class Tank {
   readonly hull: Phaser.Physics.Arcade.Image;
   readonly turret: Phaser.GameObjects.Image;
   private readonly body: Phaser.Physics.Arcade.Body;
+  /** Pixels the turret is kicked back along its barrel after a shot. */
+  private kick = 0;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     this.hull = scene.physics.add.image(x, y, 'tank_hull').setDepth(10);
@@ -62,7 +64,14 @@ export class Tank {
     this.syncTurret();
   }
 
+  /** Kicks the turret back a couple of whole pixels; it settles over a few frames. */
+  recoil() {
+    this.kick = 3;
+  }
+
   private syncTurret() {
-    this.turret.setPosition(this.hull.x, this.hull.y);
+    const a = this.turret.rotation;
+    this.turret.setPosition(this.hull.x - Math.round(Math.cos(a) * this.kick), this.hull.y - Math.round(Math.sin(a) * this.kick));
+    if (this.kick > 0) this.kick = Math.max(0, this.kick - 0.5);
   }
 }

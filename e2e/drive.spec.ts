@@ -45,7 +45,7 @@ test('rocks block the tank', async ({ page }) => {
     const scene = (window as any).__LT_GAME__.scene.getScene('Game');
     const t = scene.tank.hull;
     const rocks = Array.from(scene.physics.world.staticBodies as Set<any>)
-      .filter((b: any) => b.gameObject.texture.key === 'rock')
+      .filter((b: any) => b.gameObject.texture.key.startsWith('rock'))
       .map((b: any) => b.center);
     rocks.sort((a: any, b: any) => Math.hypot(a.x - t.x, a.y - t.y) - Math.hypot(b.x - t.x, b.y - t.y));
     const r = rocks[0];

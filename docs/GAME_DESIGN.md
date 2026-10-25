@@ -89,6 +89,16 @@ Numbers live in `FUEL`, `WORKSHOP` and `SAVE` in `src/data/tuning.ts`.
   - Missing, corrupted or other-version saves are ignored (with a console warning) and a new game starts; storage errors never stop the game. Loaded values are clamped (position inside the world, hull 1..max, fuel 1..max).
   - Drones always restart at home on load.
 
+## Polish (M5)
+
+- **Art:** PixelLab ground and three boulder variants. Rocks are mirrored but never rotated, because their lighting is baked in.
+- **Feedback:** turret recoil (3 px, whole pixels), a red flash on the tank when hit, dark smoke while hull is at or below 30%.
+- **Sound:** synthesized effects (see `ART_REQUESTS.md`); M mutes and is remembered.
+- **Pause:** Esc or P pauses the game (drones, fuel, autosave timer all stop) and shows the full controls list. With the workshop open, Esc only closes it.
+- **Warnings:** outside the safe zone, "Low fuel · return to ship" or "Hull critical · repair at ship" appears at the top of the screen.
+- **Hint bar:** shortened; fades after 45 s (the pause screen keeps the full list).
+- **Fixes:** static collision circles (rocks, ship) were 10–18 px up-left of their art (Phaser's `StaticBody.setCircle` ignores its offset; `setOffset` applies it). Keys pressed in the same frame could be handled twice (Phaser re-dispatches its per-frame key queue on every DOM key event); handlers are wrapped with `keyOnce`. Right-click menu disabled over the game; crosshair cursor.
+
 ## Debug
 
 - Add `?debug` to the URL to draw physics bodies.
