@@ -25,6 +25,7 @@ export interface ShipLayout {
 }
 
 const DOOR_SLACK = 12; // px either side of the door that still counts as the doorway
+const FRONT_LANE = 40; // px either side of the door's middle where E takes the tank in
 
 /** True while the tank is in the ship or rolling through the door: safe from everything. */
 export function sheltered(state: ShipState): boolean {
@@ -59,6 +60,20 @@ export function atDoorway(tank: Vec, open: number, l: ShipLayout): boolean {
   // A little wider than the door itself: the ship straightens the tank up as it rolls in.
   const inX = tank.x >= l.door.x - DOOR_SLACK && tank.x <= l.door.x + l.door.w + DOOR_SLACK;
   return inX && tank.y >= bottom && tank.y <= bottom + l.mouthDepth;
+}
+
+/**
+ * In front of the door, close enough to be offered E to go in: a lane below
+ * the door from which a straight run to the doorway can't clip the hull.
+ */
+export function inFrontOfDoor(tank: Vec, l: ShipLayout): boolean {
+  const m = doorMouth(l);
+  return Math.abs(tank.x - m.x) <= FRONT_LANE && tank.y >= m.y && Math.hypot(tank.x - m.x, tank.y - m.y) < l.openDistance;
+}
+
+/** The route the ship drives the tank in by: straight to the doorway, then into the hold. */
+export function entryPath(l: ShipLayout): Vec[] {
+  return [doorMouth(l), { ...l.hold }];
 }
 
 /** True if a point (relative to the ship center) is within `pad` of the hull. */

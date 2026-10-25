@@ -152,11 +152,11 @@ All numbers live in `BURROWERS` in `src/data/tuning.ts`; logic in `src/systems/b
 
 Geometry and timings in `SHIP` (`src/data/tuning.ts`). Pure door and footprint logic in `src/systems/ship.ts`, unit tested in `tests/ship.test.ts`.
 
-- **Size and solidity:** a 320×256 wreck at the world center, nose north, about 2.5× the old one. Its hull is nine invisible collision circles (nose, fuselage, cargo bay, wings, engine pods). Tanks, drones and shells all hit it, and drones steer around it.
+- **Size and solidity:** a 320×256 wreck at the world center, nose north, about 2.5× the old one. Its hull is eleven invisible collision circles (nose, fuselage, cargo bay, wings, wing roots, engine pods), checked against the art with `?debug`. Tanks, drones and shells all hit it, and drones steer around it.
 - **Cargo door:** at the bottom center, facing the spawn. It slides up into the hull when the tank's center comes within 120 px of the doorway, and shuts again when the tank leaves. The shutter is a separate sprite cropped in whole-pixel steps, and the opening behind it is a dark hold painted into the ship's art.
 - **Going in:**
   - Drive into the open doorway. The hull stops the tank just below it, and that counts; it may be up to 12 px off either side of the door.
-  - Or press E near the door.
+  - Or press E in front of the door: within 40 px either side of its middle and 120 px below it. A unit test checks that the run in from anywhere in that lane never cuts through the hull.
   - The ship takes over: physics off, it rolls the tank in at 110 px/s, turning smoothly. The ship draws above the tank, so it vanishes into the hold.
   - Once inside, the ship menu (the workshop) opens and the game saves.
 - **Safety:** you're safe only inside. While entering, inside or leaving:

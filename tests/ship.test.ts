@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DRONES, OBSTACLES, SHIP, TANK, WORLD_SEED } from '../src/data/tuning';
-import { atDoorway, doorMouth, doorTarget, hullAt, overHull, sheltered, stepDoor } from '../src/systems/ship';
+import { atDoorway, doorMouth, doorTarget, entryPath, hullAt, inFrontOfDoor, overHull, sheltered, stepDoor } from '../src/systems/ship';
 import { generateWorld } from '../src/systems/worldgen';
 
 const L = SHIP.layout;
@@ -26,6 +26,31 @@ describe('ship door', () => {
     expect(atDoorway({ x: L.door.x - 8, y: pushing.y }, 1, L)).toBe(true); // a little off-center is fine
     expect(atDoorway({ x: L.door.x - 20, y: pushing.y }, 1, L)).toBe(false); // beside the door
     expect(atDoorway({ x: mouth.x, y: mouth.y + L.mouthDepth + 10 }, 1, L)).toBe(false); // too far out
+  });
+
+  it('E only offers the way in from in front of the door', () => {
+    expect(inFrontOfDoor(L.exit, L)).toBe(true);
+    expect(inFrontOfDoor({ x: -115, y: 95 }, L)).toBe(false); // beside the engine pod
+    expect(inFrontOfDoor({ x: mouth.x, y: mouth.y + L.openDistance + 5 }, L)).toBe(false);
+  });
+
+  it('the drive in never passes through the hull, from anywhere E is offered', () => {
+    const bay = L.hull.find((c) => c.x === 0 && c.y + c.r === Math.max(...L.hull.map((h) => h.y + h.r)))!;
+    const [door] = entryPath(L);
+    for (let x = -60; x <= 60; x += 2) {
+      for (let y = mouth.y; y <= mouth.y + L.openDistance; y += 2) {
+        const p = { x, y };
+        if (!inFrontOfDoor(p, L) || overHull(p, L, TANK.bodyRadius)) continue;
+        // Every point along the run to the doorway clears the hull (the cargo bay itself is where it's going).
+        for (let t = 0; t <= 1; t += 0.05) {
+          const q = { x: p.x + (door.x - p.x) * t, y: p.y + (door.y - p.y) * t };
+          for (const c of L.hull) {
+            if (c === bay) continue;
+            expect(Math.hypot(q.x - c.x, q.y - c.y), `from ${x},${y}`).toBeGreaterThanOrEqual(c.r + TANK.bodyRadius - 1);
+          }
+        }
+      }
+    }
   });
 
   it('only "outside" is exposed', () => {

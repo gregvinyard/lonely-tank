@@ -139,7 +139,7 @@ Developer feedback: good; rocks needed size variety and jiggled while moving (fi
 - The world is unchanged (locked by a fixture test). Old saves with the tank where the ship now stands load it outside the door.
 - Game saves at start-up; saves made inside store the spot outside the door.
 
-**Verified:** typecheck ✅, 133 unit tests ✅ (adds the world-layout lock, door logic, hull geometry and rock gaps), 49 browser tests ✅ (adds: door opens and shuts, driving in opens the menu and calms drones, the Leave ship button rolls the tank out facing south without firing, the hull is solid, old save relocation, saving from inside). The changed browser specs passed 3 times in a row.
+**Verified:** typecheck ✅, 136 unit tests ✅ (adds the world-layout lock, door logic, hull geometry and rock gaps, the E lane never clipping the hull, drones getting home from beside the ship), 49 browser tests ✅ (adds: door opens and shuts, driving in opens the menu and calms drones, the Leave ship button rolls the tank out facing south without firing, the hull is solid, old save relocation, saving from inside). The changed browser specs passed 3 times in a row.
 
 ## Next
 

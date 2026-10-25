@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { DRONES, OBSTACLES, WORLD_SEED } from '../src/data/tuning';
+import { DRONES, OBSTACLES, SHIP, WORLD_SEED } from '../src/data/tuning';
+import { hullAt } from '../src/systems/ship';
 import { alertBrain, calmBrain, newBrain, stepDrone, type DroneBrain, type Vec } from '../src/systems/drone';
 import { createRng } from '../src/systems/rng';
 import { insideAny, steerToward, type Circle } from '../src/systems/steer';
@@ -85,6 +86,23 @@ describe('drone steering', () => {
       const player = { x: rock.x + ((rock.x - d.x) / len) * reach, y: rock.y + ((rock.y - d.y) / len) * reach };
       const r = simulate(alertBrain(newBrain(d), DRONES.alertMs), d, player, solid, 8);
       expect(r.closest, d.id).toBeLessThan(DRONES.bodyRadius + 30);
+    }
+  });
+
+  it('gets home from right beside the ship after chasing the tank to it', () => {
+    const world = generateWorld(WORLD_SEED);
+    const solid = [
+      ...world.rocks.map((r) => grown(r.x, r.y, OBSTACLES.sizes[r.size].radius)),
+      ...hullAt(world.center, SHIP.layout, DRONES.bodyRadius),
+    ];
+    const c = world.center;
+    // The door, the nose, and both wingtips' far sides.
+    const spots = [world.spawn, { x: c.x, y: c.y - 170 }, { x: c.x - 160, y: c.y + 10 }, { x: c.x + 160, y: c.y + 10 }, { x: c.x - 110, y: c.y + 140 }];
+    for (const d of world.drones) {
+      for (const start of spots) {
+        const r = simulate(calmBrain(newBrain(d)), start, { x: -9999, y: -9999 }, solid, 25);
+        expect(r.nearestHome, `${d.id} from ${start.x},${start.y}`).toBeLessThan(10);
+      }
     }
   });
 

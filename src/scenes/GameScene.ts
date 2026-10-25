@@ -34,7 +34,7 @@ import { SAVE_VERSION, browserStorage, clampTank, clearSave, hasSave, loadSave, 
 import { UPGRADE_EFFECTS, computeStats, type TankStats } from '../systems/stats';
 import { build, service, type ActionResult, type ServiceAction, type TankStatus } from '../systems/workshop';
 import { dueForRespawn } from '../systems/respawn';
-import { atDoorway, doorMouth, doorTarget, hullAt, overHull, sheltered, stepDoor, type ShipState } from '../systems/ship';
+import { atDoorway, doorMouth, doorTarget, entryPath, hullAt, inFrontOfDoor, overHull, sheltered, stepDoor, type ShipState } from '../systems/ship';
 import type { Circle } from '../systems/steer';
 import { generateWorld, type World } from '../systems/worldgen';
 
@@ -360,11 +360,10 @@ export class GameScene extends Phaser.Scene {
     return sheltered(this.shipState);
   }
 
-  /** The tank is near the cargo door and could drive in. */
+  /** The tank is in front of the cargo door: E takes it in. */
   get nearDoor() {
-    const m = doorMouth(SHIP.layout);
     const c = this.world.center;
-    return this.shipState === 'outside' && Math.hypot(this.tank.x - c.x - m.x, this.tank.y - c.y - m.y) < SHIP.layout.openDistance;
+    return this.shipState === 'outside' && inFrontOfDoor({ x: this.tank.x - c.x, y: this.tank.y - c.y }, SHIP.layout);
   }
 
   /** Opens and closes the cargo door, and takes the tank in when it drives into the doorway. */
@@ -396,13 +395,11 @@ export class GameScene extends Phaser.Scene {
   enterShip() {
     if (this.shipState !== 'outside') return;
     const c = this.world.center;
-    const m = doorMouth(SHIP.layout);
-    const L = SHIP.layout;
     this.shipState = 'entering';
     this.tankBody.setVelocity(0, 0);
     this.tankBody.enable = false;
     this.save();
-    this.driveTank([{ x: c.x + m.x, y: c.y + m.y }, { x: c.x + L.hold.x, y: c.y + L.hold.y }], () => {
+    this.driveTank(entryPath(SHIP.layout).map((p) => ({ x: c.x + p.x, y: c.y + p.y })), () => {
       this.shipState = 'inside';
       this.workshopOpen = true;
       sfx.play('open');

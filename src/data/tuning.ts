@@ -77,8 +77,10 @@ export const SHIP = {
       { x: 0, y: 62, r: 50 }, // cargo bay, door at the bottom
       { x: -74, y: 22, r: 30 }, // wings
       { x: -102, y: 34, r: 16 },
+      { x: -62, y: -6, r: 16 }, // wing roots, where the leading edge meets the fuselage
       { x: 74, y: 22, r: 30 },
       { x: 102, y: 34, r: 16 },
+      { x: 62, y: -6, r: 16 },
       { x: -64, y: 80, r: 30 }, // engine pods
       { x: 64, y: 80, r: 30 },
     ],
