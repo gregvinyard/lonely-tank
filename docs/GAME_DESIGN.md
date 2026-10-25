@@ -133,3 +133,20 @@ Numbers live in `FUEL`, `WORKSHOP` and `SAVE` in `src/data/tuning.ts`.
 
 - Add `?debug` to the URL to draw physics bodies.
 - Add `?newgame` to the URL to delete the save and start over (the flag is removed from the address so a reload resumes).
+
+## Burrowers (v0.3)
+
+All numbers live in `BURROWERS` in `src/data/tuning.ts`; logic in `src/systems/burrower.ts` (pure, unit tested), visuals in `src/entities/Burrower.ts`.
+
+- **Placement:** 5 (`burrower-00`…), 620 px or more from the ship, clear of rocks, drone homes and salvage. They're placed last from seed + 5, so the v0.2 world layout and existing saves are unchanged.
+- **Underground:** shown only as a sand mound. While tunnelling it leaves small mounds every 9 px that fade over 3.2 s (pooled, whole-pixel positions, not drawn over rocks). It passes under rocks and has no physics body. Shells fly over it and it can't hurt the tank.
+- **Senses:** feels a moving tank within 260 px, a stopped one within 130 px. It ignores a tank in the safe zone, and gives up beyond 340 px from the tank or 520 px from home.
+- **Attack:**
+  1. It tunnels toward the tank at 80 px/s (the tank does 160, so keep moving and you get away).
+  2. Within 22 px, on open ground (never under a rock or by the ship), the mound shakes and sprays sand for 0.7 s, with a low rumble.
+  3. It bursts out: a tank within 34 px takes 15 damage.
+  4. It stays up for 1.6 s. Shells hit it then, and touching it does 8 damage.
+  5. It dives and rests for 1.4 s before it can stalk again.
+- **Hits and damage:** 2 HP. Hits and contact are checked by distance in `GameScene.updateBurrowers`. All tank damage goes through `damageTank`, so invulnerability, the field-repair calm timer and rescue apply.
+- **Loot:** 1 crystal, 40% chance of 2 (`<id>@<kill time>-crystal`). It returns home after the same 5 minutes as drones and is saved in the same `destroyed` list. A rescue sends burrowers home underground.
+

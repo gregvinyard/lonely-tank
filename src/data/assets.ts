@@ -178,6 +178,40 @@ export const ASSETS: AssetDef[] = [
     },
   },
   {
+    // Burrower bursting out of its hole (only shown while surfaced).
+    key: 'burrower',
+    width: 48,
+    height: 48,
+    file: 'assets/burrower.png',
+    placeholder: (g) => {
+      g.fillStyle(0x1e1416).fillCircle(24, 24, 16);
+      g.fillStyle(0xc98a2a).fillCircle(24, 22, 10);
+      g.fillStyle(PALETTE.violet).fillRect(26, 20, 2, 2);
+    },
+  },
+  {
+    // The sand mound over a buried burrower.
+    key: 'mound',
+    width: 32,
+    height: 32,
+    file: 'assets/mound.png',
+    placeholder: (g) => {
+      g.fillStyle(0x7a4f38).fillEllipse(17, 18, 24, 16);
+      g.fillStyle(PALETTE.sandLight).fillEllipse(15, 15, 22, 14);
+    },
+  },
+  {
+    // Small mound left in a burrower's wake; fades out.
+    key: 'mound_trail',
+    width: 12,
+    height: 8,
+    placeholder: (g) => {
+      g.fillStyle(0x8a5a40).fillEllipse(6.5, 4.5, 11, 7);
+      g.fillStyle(0xd09a78).fillEllipse(5.5, 3.5, 9, 5);
+      g.fillStyle(0xe2b294).fillRect(4, 2, 3, 1);
+    },
+  },
+  {
     // Circuit board dropped by destroyed drones.
     key: 'circuit',
     width: 32,

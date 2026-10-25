@@ -3,12 +3,16 @@ import { WORLD_SEED } from '../src/data/tuning';
 import { UPGRADES } from '../src/data/upgrades';
 import { generateWorld } from '../src/systems/worldgen';
 
-// One "sweep" = collecting every node and destroying every drone once. Salvage
+// One "sweep" = collecting every node and destroying every drone and burrower once. Salvage
 // regrows and drones return, so the climb takes several sweeps; this keeps it
 // in the 30-60 minute range the v0.2 spec aims for.
 describe('balance', () => {
   const world = generateWorld(WORLD_SEED);
-  const sweep = { scrap: world.drones.reduce((n, d) => n + d.drop, 0), crystal: 0, circuit: world.drones.length };
+  const sweep = {
+    scrap: world.drones.reduce((n, d) => n + d.drop, 0),
+    crystal: world.burrowers.reduce((n, b) => n + b.drop, 0),
+    circuit: world.drones.length,
+  };
   for (const n of world.resources) sweep[n.kind as 'scrap' | 'crystal'] += n.amount;
   const total = { scrap: 0, crystal: 0, circuit: 0 };
   for (const u of UPGRADES) for (const t of u.tiers) for (const k of ['scrap', 'crystal', 'circuit'] as const) total[k] += t.cost[k] ?? 0;

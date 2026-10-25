@@ -76,7 +76,7 @@ test('ground and rock art load from files and rocks collide where they are drawn
       return {
         // Every manifest entry with a file must load as an image (placeholders are canvases drawn at boot).
         sources: (() => {
-          const keys = s.textures.getTextureKeys().filter((k) => /^(terrain_ground|rock|up_|circuit|scrap|crystal|drone|spaceship|tank_)/.test(k));
+          const keys = s.textures.getTextureKeys().filter((k) => /^(terrain_ground|rock|up_|circuit|scrap|crystal|drone|spaceship|tank_|burrower$|mound$)/.test(k));
           return { count: keys.length, placeholders: keys.filter((k) => !(src(k) instanceof HTMLImageElement)) };
         })(),
         variants: [...new Set(rocks.map((b) => b.gameObject.texture.key))].sort(),
@@ -85,7 +85,7 @@ test('ground and rock art load from files and rocks collide where they are drawn
     })()`,
   );
   // One texture per PNG in public/assets, none of them a fallback placeholder.
-  expect(r.sources).toEqual({ count: 23, placeholders: [] });
+  expect(r.sources).toEqual({ count: 25, placeholders: [] });
   expect(r.variants).toEqual(['rock', 'rock_2', 'rock_3', 'rock_l1', 'rock_l2', 'rock_s1', 'rock_s2']);
   expect(r.offCenter).toBeLessThan(0.5);
 });

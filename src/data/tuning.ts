@@ -128,6 +128,35 @@ export const DRONES = {
   scrapDropChance: 0.6,
 } as const;
 
+// Burrowers tunnel under the sand and can only bite, or be shot, when they surface.
+export const BURROWERS = {
+  count: 5,
+  hp: 2,
+  bodyRadius: 14, // when surfaced
+  minDistance: SHIP.safeRadius + 300, // homes are out in the wasteland
+  rockClearance: 30, // px from a rock's edge to a home
+  droneClearance: 160,
+  minSpacing: 320,
+  roamRadius: 140,
+  roamSpeed: 40,
+  stalkSpeed: 80, // the tank does 160: keep moving and you get away
+  senseMoving: 260, // feels moving treads this far away
+  senseStill: 130, // and a stopped tank only this close
+  loseRadius: 340,
+  leashRadius: 520,
+  strikeRange: 22, // surfaces when this close to the tank
+  warnMs: 700, // the mound shakes this long before it bursts out
+  upMs: 1600,
+  restMs: 1400, // after diving, before it stalks again
+  biteRadius: 34,
+  biteDamage: 15,
+  contactDamage: 8, // touching it while it is up
+  extraDropChance: 0.4, // 1 crystal, sometimes 2
+  trailEvery: 9, // px tunnelled between trail mounds
+  trailMs: 3200, // trail mounds fade over this long
+  trailPool: 30, // trail mounds per burrower
+} as const;
+
 export const RESCUE = {
   salvageLoss: 0.25, // fraction of each carried resource lost, rounded down
 } as const;

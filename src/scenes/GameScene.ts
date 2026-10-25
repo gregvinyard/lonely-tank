@@ -1,5 +1,6 @@
 import * as Phaser from 'phaser';
 import {
+  BURROWERS,
   CAMERA,
   CANNON,
   DRONES,
@@ -21,7 +22,9 @@ import {
 import { sfx } from '../audio/sfx';
 import { ROCK_VARIANTS } from '../data/assets';
 import { noUpgrades, type UpgradeId, type UpgradeLevels } from '../data/upgrades';
+import { Burrower } from '../entities/Burrower';
 import { Drone } from '../entities/Drone';
+import type { BurrowEvent } from '../systems/burrower';
 import { Tank } from '../entities/Tank';
 import { keyOnce } from '../input/keyOnce';
 import { applyDamage, canFire, rescuePenalty } from '../systems/combat';
@@ -81,6 +84,8 @@ export class GameScene extends Phaser.Scene {
   readonly resources = new Map<string, { node: ResourceNode; sprite: Phaser.GameObjects.Image; glow?: Phaser.GameObjects.Image }>();
   /** Live drones by stable id. */
   readonly drones = new Map<string, Drone>();
+  /** Live burrowers by stable id. */
+  readonly burrowers = new Map<string, Burrower>();
   /** Everything collected or destroyed, with the play time it happened at. */
   readonly collected = new Map<string, number>();
   readonly destroyed = new Map<string, number>();
@@ -104,6 +109,8 @@ export class GameScene extends Phaser.Scene {
   private droneGroup!: Phaser.Physics.Arcade.Group;
   /** Rocks and the ship, grown by a drone's radius, for steering. */
   private droneObstacles: Circle[] = [];
+  /** Rock collision circles, for burrowers (which pass under them). */
+  private rockCircles: Circle[] = [];
   private dustDistance = 0;
   private lastFired = -Infinity;
   private invulnUntil = 0;
@@ -135,6 +142,7 @@ export class GameScene extends Phaser.Scene {
     this.fuel = this.maxFuel;
     this.resources.clear();
     this.drones.clear();
+    this.burrowers.clear();
     this.collected.clear();
     this.destroyed.clear();
     const worldIds = new Set(this.world.resources.map((n) => n.id));
@@ -215,6 +223,8 @@ export class GameScene extends Phaser.Scene {
     this.tank = new Tank(this, start.x, start.y);
     this.physics.add.collider(this.tank.hull, solids);
 
+    this.rockCircles = this.world.rocks.map((r) => ({ x: r.x, y: r.y, r: OBSTACLES.sizes[r.size].radius }));
+    for (const p of this.world.burrowers) if (!this.destroyed.has(p.id)) this.burrowers.set(p.id, new Burrower(this, p, this.dust));
     const grow = DRONES.bodyRadius + DRONES.obstacleMargin;
     this.droneObstacles = [
       ...this.world.rocks.map((r) => ({ x: r.x, y: r.y, r: OBSTACLES.sizes[r.size].radius + grow })),
@@ -317,6 +327,8 @@ export class GameScene extends Phaser.Scene {
 
     for (const d of this.drones.values()) d.update(time, delta, this.tank, this.inSafeZone, c, SHIP.safeRadius, this.droneObstacles);
 
+    this.updateBurrowers(delta);
+
     for (const s of this.shells.getChildren() as Phaser.Physics.Arcade.Image[]) {
       if (time - (s.getData('born') as number) > st.shellLifetimeMs) s.destroy();
     }
@@ -329,6 +341,73 @@ export class GameScene extends Phaser.Scene {
     const nodes = Array.from(this.resources.values(), (r) => r.node);
     this.nearby = nearestInRange(this.tank, nodes, RESOURCES.interactRange);
     this.nearestSalvage = st.scanner > 0 ? nearestInRange(this.tank, nodes, Infinity) : undefined;
+  }
+
+  private updateBurrowers(delta: number) {
+    const c = this.world.center;
+    const t = this.tank;
+    const world = {
+      player: { x: t.x, y: t.y },
+      playerMoving: t.speed > 10,
+      playerSafe: this.inSafeZone,
+      safeCenter: c,
+      safeRadius: SHIP.safeRadius,
+      isClear: (p: { x: number; y: number }) => this.openGround(p),
+      underRock: (p: { x: number; y: number }) => this.rockCircles.some((r) => Math.hypot(p.x - r.x, p.y - r.y) < r.r + 2),
+    };
+    const shells = this.shells.getChildren() as Phaser.Physics.Arcade.Image[];
+    for (const b of this.burrowers.values()) {
+      const event = b.update(delta, world);
+      if (event) this.onBurrowEvent(b, event);
+      // Only a surfaced burrower can be hit or touched; shells fly over a buried one.
+      if (!b.surfaced) continue;
+      const shell = shells.find((s) => s.active && Math.hypot(s.x - b.x, s.y - b.y) < BURROWERS.bodyRadius + 3);
+      if (shell) {
+        this.impact(shell);
+        if (b.hit(this.stats.damage)) {
+          this.destroyBurrower(b);
+          continue;
+        }
+        sfx.play('hit');
+      }
+      if (Math.hypot(t.x - b.x, t.y - b.y) < TANK.bodyRadius + BURROWERS.bodyRadius) this.damageTank(BURROWERS.contactDamage, b);
+    }
+  }
+
+  /** Ground a burrower may rest or surface on: not under a rock, not by the ship. */
+  private openGround(p: { x: number; y: number }) {
+    const c = this.world.center;
+    const r = BURROWERS.bodyRadius;
+    if (Math.hypot(p.x - c.x, p.y - c.y) < SHIP.safeRadius + r + 8) return false;
+    return this.rockCircles.every((o) => Math.hypot(p.x - o.x, p.y - o.y) >= o.r + r + 4);
+  }
+
+  private onBurrowEvent(b: Burrower, event: BurrowEvent) {
+    const near = Math.hypot(this.tank.x - b.x, this.tank.y - b.y) < 360;
+    if (event === 'warn' && near) sfx.play('rumble');
+    if (event !== 'surface') return;
+    if (near) {
+      sfx.play('burst');
+      this.cameras.main.shake(90, 0.003);
+    }
+    if (Math.hypot(this.tank.x - b.x, this.tank.y - b.y) < BURROWERS.biteRadius) this.damageTank(BURROWERS.biteDamage, b);
+  }
+
+  private destroyBurrower(b: Burrower) {
+    const { x, y } = b;
+    const p = b.placement;
+    this.burrowers.delete(p.id);
+    this.destroyed.set(p.id, this.playTimeMs);
+    b.destroy();
+
+    this.sparks.explode(14, x, y);
+    for (let i = 0; i < 8; i++) this.dust.emitParticleAt(x + Phaser.Math.Between(-10, 10), y + Phaser.Math.Between(-8, 8), 1);
+    this.cameras.main.shake(120, 0.004);
+    sfx.play('explode');
+
+    // Burrowers live on crystal; one-off drop like a drone's.
+    const kill = `${p.id}@${Math.round(this.playTimeMs)}`;
+    this.addResourceNode({ id: `${kill}-crystal`, kind: 'crystal', amount: p.drop, x: Math.round(x), y: Math.round(y), angle: 0, dropped: true });
   }
 
   /** The repair kit slowly mends the hull while the tank is stopped and hasn't been hit for a while. */
@@ -421,14 +500,22 @@ export class GameScene extends Phaser.Scene {
       this.addResourceNode(node, true);
     }
     for (const id of dueForRespawn(this.destroyed, this.playTimeMs, RESPAWN.droneMs)) {
-      const p = this.world.drones.find((d) => d.id === id);
+      const p = this.world.drones.find((d) => d.id === id) ?? this.world.burrowers.find((b) => b.id === id);
       if (!p) {
         this.destroyed.delete(id);
         continue;
       }
       if (Math.hypot(t.x - p.x, t.y - p.y) < RESPAWN.droneClearance) continue;
       this.destroyed.delete(id);
-      const drone = new Drone(this, p, this.droneGroup);
+      const burrower = this.world.burrowers.find((b) => b.id === id);
+      if (burrower) {
+        const b = new Burrower(this, burrower, this.dust);
+        this.burrowers.set(id, b);
+        b.mound.setAlpha(0);
+        this.tweens.add({ targets: b.mound, alpha: 1, duration: 600 });
+        continue;
+      }
+      const drone = new Drone(this, this.world.drones.find((d) => d.id === id)!, this.droneGroup);
       this.drones.set(id, drone);
       drone.sprite.setAlpha(0);
       this.tweens.add({ targets: drone.sprite, alpha: 1, duration: 600 });
@@ -557,15 +644,20 @@ export class GameScene extends Phaser.Scene {
   }
 
   private onDroneContact(drone: Drone) {
+    drone.knockFrom(this.tank, this.time.now);
+    this.damageTank(DRONES.contactDamage, drone);
+  }
+
+  /** Damages the tank unless it was just hit; rescues it at 0 hull. */
+  private damageTank(amount: number, from: { x: number; y: number }) {
     const now = this.time.now;
-    drone.knockFrom(this.tank, now);
     if (now < this.invulnUntil) return;
 
     this.invulnUntil = now + HULL.hitInvulnMs;
     this.lastHitAt = now;
-    this.hull = applyDamage(this.hull, DRONES.contactDamage);
+    this.hull = applyDamage(this.hull, amount);
     this.cameras.main.shake(150, 0.006);
-    this.sparks.explode(8, (this.tank.x + drone.x) / 2, (this.tank.y + drone.y) / 2);
+    this.sparks.explode(8, (this.tank.x + from.x) / 2, (this.tank.y + from.y) / 2);
     sfx.play('hurt');
     // Brief red flash on the tank itself.
     for (const part of [this.tank.hull, this.tank.turret]) part.setTint(0xff5040).setTintMode(Phaser.TintModes.FILL);
@@ -587,6 +679,7 @@ export class GameScene extends Phaser.Scene {
     const { spawn } = this.world;
     this.tank.reset(spawn.x, spawn.y);
     for (const d of this.drones.values()) d.calm();
+    for (const b of this.burrowers.values()) b.calm();
 
     // Jump the camera instead of letting the follow smoothing cross the map.
     const cam = this.cameras.main;

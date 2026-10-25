@@ -119,9 +119,20 @@ Developer feedback: good; rocks needed size variety and jiggled while moving (fi
 
 **Verified:** typecheck ✅, 113 unit tests ✅ (adds steering, real-map chase and return-home simulations, alerts), 38 browser tests ✅ (adds: long-range shot provokes a drone, a drone gets around a big rock).
 
+## M11 — Burrowers ✅
+
+- Five burrowers tunnel under the sand, leaving a fading trail of mounds; stopped, they're a single mound.
+- They feel the tank (moving treads from further away), tunnel after it, shake and rumble as a warning, burst out to bite, and stay up for 1.6 s. Only then can they be shot or hurt the tank.
+- They drop crystal, respawn like drones, and are saved. Placed last from their own seed, so the world layout is unchanged.
+- PixelLab art: burrower, sand mound (4 generations). New synthesized sounds: rumble, burst.
+- Balance: crystal per sweep 23 → 28 (maxing takes ~2.6 sweeps of crystal).
+- Shared `damageTank` for drones and burrowers.
+
+**Verified:** typecheck ✅, 124 unit tests ✅ (adds burrower placement and behaviour), 43 browser tests ✅ (adds: shells fly over a buried burrower, a surfaced one can be shot and drops crystal, it only bites after surfacing, the trail fades, destroyed burrowers survive a reload and return).
+
 ## Next
 
-- M11 — Burrowers.
+- Developer playtest of v0.3.
 
 ## Known issues
 

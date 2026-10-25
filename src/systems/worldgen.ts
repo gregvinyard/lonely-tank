@@ -1,5 +1,6 @@
 import { createRng, randRange } from './rng';
-import { DRONES, OBSTACLES, RESOURCES, SHIP, WORLD_SIZE } from '../data/tuning';
+import { BURROWERS, DRONES, OBSTACLES, RESOURCES, SHIP, WORLD_SIZE } from '../data/tuning';
+import { placeBurrowers, type BurrowerPlacement } from './burrower';
 import { placeDrones, type DronePlacement } from './drone';
 import { placeResources, type ResourceNode } from './resources';
 import { outerBonus } from './respawn';
@@ -82,6 +83,7 @@ export interface World {
   rocks: SizedRock[];
   resources: ResourceNode[];
   drones: DronePlacement[];
+  burrowers: BurrowerPlacement[];
 }
 
 /** The full deterministic layout of the wasteland for a seed. */
@@ -139,11 +141,31 @@ export function generateWorld(seed: number): World {
       { ...spawn, r: 40 },
     ],
   });
+  const sizedRocks = snappedRocks.map((r, i) => ({ ...r, size: sizes[i] }));
+
+  // Burrowers came later (v0.3): placed last, from their own seed, so nothing
+  // above changes and existing saves keep the same world.
+  const burrowers = placeBurrowers({
+    seed: seed + 5,
+    count: BURROWERS.count,
+    worldSize: WORLD_SIZE,
+    margin: 80,
+    center,
+    minDistance: BURROWERS.minDistance,
+    avoid: [
+      ...sizedRocks.map((r) => ({ x: r.x, y: r.y, r: OBSTACLES.sizes[r.size].radius + BURROWERS.rockClearance })),
+      ...snappedDrones.map((d) => ({ x: d.x, y: d.y, r: BURROWERS.droneClearance })),
+      ...snappedResources.map((n) => ({ x: n.x, y: n.y, r: 30 })),
+    ],
+    minSpacing: BURROWERS.minSpacing,
+    extraDropChance: BURROWERS.extraDropChance,
+  });
   return {
     seed,
     center,
     spawn,
-    rocks: snappedRocks.map((r, i) => ({ ...r, size: sizes[i] })),
+    burrowers,
+    rocks: sizedRocks,
     resources: snappedResources,
     drones: snappedDrones,
   };
