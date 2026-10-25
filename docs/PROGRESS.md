@@ -110,7 +110,7 @@ Developer feedback: good; rocks needed size variety and jiggled while moving (fi
 - "Goal complete!" notice when the goal ladder moves up a rung.
 - Whole-tree build test: all 20 tiers, final goal text, final stats, no errors.
 
-**Verified:** typecheck ✅, 101 unit tests ✅, 35 browser tests ✅, locally and live.
+**Verified:** typecheck ✅, 101 unit tests ✅, 36 browser tests ✅ (adds: whole-tree build, clicks on the closed workshop do nothing, every asset PNG loads), locally and live.
 
 ## Next
 

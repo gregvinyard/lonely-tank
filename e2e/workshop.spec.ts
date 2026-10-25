@@ -134,3 +134,18 @@ test('the whole tree can be built to the top of the goal ladder', async ({ page 
   expect(await read<Record<string, number>>(page, `${SCENE}.stats`)).toMatchObject({ maxHull: 175, maxFuel: 220, damage: 3, scanner: 2 });
   expect(errors).toEqual([]);
 });
+
+test('clicks where the closed workshop buttons were do nothing', async ({ page }) => {
+  await press(page, 'e');
+  const spots = [
+    await screenCenter(page, `${HUD}.workshop.buildButton.bg`),
+    await screenCenter(page, `${HUD}.workshop.services[0].bg`),
+  ];
+  await press(page, 'e');
+  await page.evaluate(`(() => { const s = ${SCENE}; s.inventory = ${RICH}; s.fuel = 30; s.tank.reset(s.world.center.x + 170, s.world.center.y); })()`);
+  await page.waitForTimeout(100);
+  for (const p of spots) await page.mouse.click(p.x, p.y);
+  await page.waitForTimeout(100);
+  expect(await read<number>(page, `Object.values(${SCENE}.levels).reduce((a, b) => a + b, 0)`)).toBe(0);
+  expect(await read<number>(page, `${SCENE}.fuel`)).toBe(30);
+});

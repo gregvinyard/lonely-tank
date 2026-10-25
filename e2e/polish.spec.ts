@@ -67,21 +67,25 @@ test('mute is remembered across reloads', async ({ page }) => {
 });
 
 test('ground and rock art load from files and rocks collide where they are drawn', async ({ page }) => {
-  const r = await read<{ sources: string[]; variants: string[]; offCenter: number }>(
+  const r = await read<{ sources: { count: number; placeholders: string[] }; variants: string[]; offCenter: number }>(
     page,
     `(() => {
       const s = ${SCENE};
       const src = (k) => s.textures.get(k).getSourceImage();
       const rocks = [...s.physics.world.staticBodies].filter((b) => b.gameObject.texture.key.startsWith('rock'));
       return {
-        // Loaded PNGs are images; placeholders are canvases drawn at boot.
-        sources: ['terrain_ground', 'rock', 'rock_2', 'rock_3', 'rock_s1', 'rock_s2', 'rock_l1', 'rock_l2'].map((k) => (src(k) instanceof HTMLImageElement ? 'png' : 'placeholder')),
+        // Every manifest entry with a file must load as an image (placeholders are canvases drawn at boot).
+        sources: (() => {
+          const keys = s.textures.getTextureKeys().filter((k) => /^(terrain_ground|rock|up_|circuit|scrap|crystal|drone|spaceship|tank_)/.test(k));
+          return { count: keys.length, placeholders: keys.filter((k) => !(src(k) instanceof HTMLImageElement)) };
+        })(),
         variants: [...new Set(rocks.map((b) => b.gameObject.texture.key))].sort(),
         offCenter: Math.max(...rocks.map((b) => Math.hypot(b.center.x - b.gameObject.x, b.center.y - b.gameObject.y))),
       };
     })()`,
   );
-  expect(r.sources).toEqual(Array(8).fill('png'));
+  // One texture per PNG in public/assets, none of them a fallback placeholder.
+  expect(r.sources).toEqual({ count: 23, placeholders: [] });
   expect(r.variants).toEqual(['rock', 'rock_2', 'rock_3', 'rock_l1', 'rock_l2', 'rock_s1', 'rock_s2']);
   expect(r.offCenter).toBeLessThan(0.5);
 });

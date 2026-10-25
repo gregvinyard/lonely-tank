@@ -74,7 +74,7 @@ export class WorkshopPanel extends Phaser.GameObjects.Container {
     // Services.
     const sw = (WORKSHOP_W - 16 - GAP) / 2;
     (['refuel', 'repair'] as const).forEach((a, i) => {
-      const b = new Button(scene, 8 + i * (sw + GAP), 22, sw, 22, () => this.game_.workshopService(a));
+      const b = new Button(scene, 8 + i * (sw + GAP), 22, sw, 22, () => this.game_.workshopOpen && this.game_.workshopService(a));
       b.add(label(scene, 6, 4, a === 'refuel' ? '[1] Refuel' : `[2] Repair +${WORKSHOP.repair.hull}`));
       const cost = label(scene, 6, 13, '', UI_TEXT.dim);
       b.add(cost);
@@ -149,7 +149,8 @@ export class WorkshopPanel extends Phaser.GameObjects.Container {
   }
 
   buildSelected() {
-    this.game_.buildUpgrade(this.cards[this.selected].def.id);
+    // Only from the open workshop, whatever input reached us.
+    if (this.game_.workshopOpen) this.game_.buildUpgrade(this.cards[this.selected].def.id);
   }
 
   /** Re-reads the Game scene's state; cheap enough to call every frame while open. */
