@@ -170,11 +170,11 @@ export class GameScene extends Phaser.Scene {
     // Dark smoke from a badly damaged tank.
     this.smoke = this.add.particles(0, 0, 'dust', {
       emitting: false,
-      lifespan: 900,
-      speedY: { min: -18, max: -8 },
-      speedX: { min: -5, max: 5 },
-      alpha: { start: 0.7, end: 0 },
-      tint: 0x2a2224,
+      lifespan: 1300,
+      speedY: { min: -30, max: -16 },
+      speedX: { min: -6, max: 6 },
+      alpha: { start: 1, end: 0 },
+      tint: 0x1e1819,
     });
     this.smoke.setDepth(15);
 
@@ -500,9 +500,9 @@ export class GameScene extends Phaser.Scene {
   private emitSmoke(delta: number) {
     if (this.hull / this.maxHull > 0.3) return;
     this.smokeMs += delta;
-    if (this.smokeMs < 140) return;
+    if (this.smokeMs < 90) return;
     this.smokeMs = 0;
-    this.smoke.emitParticleAt(this.tank.x + Phaser.Math.Between(-6, 6), this.tank.y + Phaser.Math.Between(-6, 6), 1);
+    this.smoke.emitParticleAt(this.tank.x + Phaser.Math.Between(-6, 6), this.tank.y + Phaser.Math.Between(-6, 4), 2);
   }
 
   private emitDust(delta: number) {
