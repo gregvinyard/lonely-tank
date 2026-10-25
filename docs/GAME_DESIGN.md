@@ -58,6 +58,21 @@ All numbers live in `RESOURCES` in `src/data/tuning.ts`; placement is `generateW
 - Bottom-center: interaction prompt.
 - Compass: when the ship is off screen, a teal arrow sits on the screen edge pointing to it, with the distance (1 m = 10 px).
 
+## Combat (M3)
+
+All numbers live in `HULL`, `CANNON`, `DRONES` and `RESCUE` in `src/data/tuning.ts`.
+
+- **Cannon:** hold left mouse to fire along the turret's facing (it lags the cursor slightly). 420 ms cooldown, shells fly 420 px/s for 0.9 s (~380 px). Shells stop at rocks, the ship and drones. Muzzle flash and spark impacts.
+- **Drones:** 10, placed deterministically with stable ids (`drone-00`…). Each patrols within 120 px of its home, idling between waypoints at 36 px/s.
+  - Chases the tank within 200 px at 95 px/s (the tank does 160, so you can always outrun one).
+  - Gives up beyond 300 px from the tank, 420 px from home, or when the tank enters the safe zone, then returns home.
+  - Never enters the ship's safe zone: homes are placed so the patrol area is outside it, and positions are clamped as a backstop.
+  - 3 hits to destroy. White flash and knockback on hit; sparks, dust and a small camera shake on death.
+  - 60% leave 1–2 scrap (decided at world generation; the drop has id `<drone id>-drop`).
+  - Hovering is shown by a bobbing ground shadow; the sprite never scales or rotates, to stay on the pixel grid.
+- **Hull:** 100. Drone contact does 10 damage, then the tank is invulnerable (blinking) for 0.6 s, so a pack can't stack hits. Screen shake and a brief red flash.
+- **Rescue:** at 0 hull the tank is returned to the ship, fully repaired, losing 25% of each carried resource (rounded down). Chasing drones go home. The same routine will handle running out of fuel in M4.
+
 ## Debug
 
 - Add `?debug` to the URL to draw physics bodies.

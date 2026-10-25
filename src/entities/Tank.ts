@@ -55,6 +55,13 @@ export class Tank {
     this.turret.rotation = rotateToward(this.turret.rotation, aimAngle, TANK.turretTurnRate * dt);
   }
 
+  /** Teleports the tank to a point, stopped and facing right. */
+  reset(x: number, y: number) {
+    this.body.reset(x, y);
+    this.hull.setRotation(0);
+    this.syncTurret();
+  }
+
   private syncTurret() {
     this.turret.setPosition(this.hull.x, this.hull.y);
   }

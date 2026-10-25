@@ -1,6 +1,21 @@
 import * as Phaser from 'phaser';
-import { CAMERA, OBSTACLES, PALETTE, RESOURCES, SHIP, WORLD_SEED, WORLD_SIZE, frameLerp } from '../data/tuning';
+import {
+  CAMERA,
+  CANNON,
+  DRONES,
+  HULL,
+  OBSTACLES,
+  PALETTE,
+  RESCUE,
+  RESOURCES,
+  SHIP,
+  WORLD_SEED,
+  WORLD_SIZE,
+  frameLerp,
+} from '../data/tuning';
+import { Drone } from '../entities/Drone';
 import { Tank } from '../entities/Tank';
+import { applyDamage, canFire, rescuePenalty } from '../systems/combat';
 import { addResource, createInventory, type Inventory } from '../systems/inventory';
 import { nearestInRange, type ResourceKind, type ResourceNode } from '../systems/resources';
 import { generateWorld, type World } from '../systems/worldgen';
@@ -15,19 +30,35 @@ export interface CollectedPayload {
   inventory: Inventory;
 }
 
+/** Emitted on game.events when the tank is returned to the ship. */
+export const RESCUED_EVENT = 'tank-rescued';
+export type RescueReason = 'destroyed' | 'fuel';
+export interface RescuedPayload {
+  reason: RescueReason;
+  lost: Inventory;
+}
+
 export class GameScene extends Phaser.Scene {
   world!: World;
   tank!: Tank;
   inventory: Inventory = createInventory();
+  hull: number = HULL.max;
+  maxHull: number = HULL.max;
   /** Uncollected resource nodes by stable id. */
   readonly resources = new Map<string, { node: ResourceNode; sprite: Phaser.GameObjects.Image; glow?: Phaser.GameObjects.Image }>();
+  /** Live drones by stable id. */
+  readonly drones = new Map<string, Drone>();
   /** The node the tank is close enough to salvage, if any. */
   nearby: ResourceNode | undefined;
   inSafeZone = true;
 
   private keys!: Keys;
   private dust!: Phaser.GameObjects.Particles.ParticleEmitter;
+  private sparks!: Phaser.GameObjects.Particles.ParticleEmitter;
+  private shells!: Phaser.Physics.Arcade.Group;
   private dustDistance = 0;
+  private lastFired = -Infinity;
+  private invulnUntil = 0;
 
   constructor() {
     super('Game');
@@ -36,7 +67,11 @@ export class GameScene extends Phaser.Scene {
   create() {
     this.world = generateWorld(WORLD_SEED);
     this.inventory = createInventory();
+    this.hull = this.maxHull = HULL.max;
     this.resources.clear();
+    this.drones.clear();
+    this.lastFired = -Infinity;
+    this.invulnUntil = 0;
     const { center } = this.world;
 
     this.physics.world.setBounds(0, 0, WORLD_SIZE, WORLD_SIZE);
@@ -61,27 +96,35 @@ export class GameScene extends Phaser.Scene {
     ship.setDepth(6);
     setCircleBody(ship, SHIP.bodyRadius);
 
-    for (const node of this.world.resources) {
-      let glow: Phaser.GameObjects.Image | undefined;
-      if (node.kind === 'crystal') {
-        glow = this.add.image(node.x, node.y, 'glow').setDepth(2).setScale(2);
-        this.tweens.add({ targets: glow, alpha: 0.35, scale: 2.4, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
-      }
-      const sprite = this.add.image(node.x, node.y, node.kind).setRotation(node.angle).setDepth(4);
-      this.resources.set(node.id, { node, sprite, glow });
-    }
+    for (const node of this.world.resources) this.addResourceNode(node);
 
     this.dust = this.add.particles(0, 0, 'dust', {
       emitting: false,
       lifespan: 600,
       speed: { min: 4, max: 14 },
-      scale: { start: 1, end: 2 },
       alpha: { start: 0.6, end: 0 },
     });
     this.dust.setDepth(8);
+    this.sparks = this.add.particles(0, 0, 'spark', {
+      emitting: false,
+      lifespan: { min: 150, max: 400 },
+      speed: { min: 30, max: 120 },
+      alpha: { start: 1, end: 0 },
+    });
+    this.sparks.setDepth(14);
 
     this.tank = new Tank(this, this.world.spawn.x, this.world.spawn.y);
     this.physics.add.collider(this.tank.hull, solids);
+
+    const droneGroup = this.physics.add.group();
+    for (const p of this.world.drones) this.drones.set(p.id, new Drone(this, p, droneGroup));
+    this.physics.add.collider(droneGroup, solids);
+    this.physics.add.collider(droneGroup, droneGroup);
+    this.physics.add.overlap(this.tank.hull, droneGroup, (_t, d) => this.onDroneContact(droneOf(d)));
+
+    this.shells = this.physics.add.group({ allowGravity: false });
+    this.physics.add.collider(this.shells, solids, (s) => this.impact(s as Phaser.Physics.Arcade.Image));
+    this.physics.add.overlap(this.shells, droneGroup, (s, d) => this.onShellHit(s as Phaser.Physics.Arcade.Image, droneOf(d)));
 
     const cam = this.cameras.main;
     cam.setBounds(0, 0, WORLD_SIZE, WORLD_SIZE);
@@ -99,7 +142,7 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  update(_time: number, delta: number) {
+  update(time: number, delta: number) {
     const k = this.keys;
     const input = {
       x: (k.right.isDown ? 1 : 0) - (k.left.isDown ? 1 : 0),
@@ -112,6 +155,7 @@ export class GameScene extends Phaser.Scene {
     const aim = pointer.positionToCamera(this.cameras.main) as Phaser.Math.Vector2;
 
     this.tank.update(input, aim, delta);
+    if (pointer.leftButtonDown() && canFire(time, this.lastFired, CANNON.cooldownMs)) this.fire(time);
 
     // Camera lerp is applied once per frame; scale it so the follow feels the
     // same at 60 Hz and 144 Hz.
@@ -119,10 +163,31 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.setLerp(l, l);
     this.emitDust(delta);
 
-    const nodes = Array.from(this.resources.values(), (r) => r.node);
-    this.nearby = nearestInRange(this.tank, nodes, RESOURCES.interactRange);
     const c = this.world.center;
     this.inSafeZone = Math.hypot(this.tank.x - c.x, this.tank.y - c.y) < SHIP.safeRadius;
+    for (const d of this.drones.values()) d.update(time, delta, this.tank, this.inSafeZone, c, SHIP.safeRadius);
+
+    for (const s of this.shells.getChildren() as Phaser.Physics.Arcade.Image[]) {
+      if (time - (s.getData('born') as number) > CANNON.lifetimeMs) s.destroy();
+    }
+
+    // Blink while invulnerable after a hit.
+    const alpha = time < this.invulnUntil && Math.floor(time / 80) % 2 === 0 ? 0.4 : 1;
+    this.tank.hull.setAlpha(alpha);
+    this.tank.turret.setAlpha(alpha);
+
+    const nodes = Array.from(this.resources.values(), (r) => r.node);
+    this.nearby = nearestInRange(this.tank, nodes, RESOURCES.interactRange);
+  }
+
+  private addResourceNode(node: ResourceNode) {
+    let glow: Phaser.GameObjects.Image | undefined;
+    if (node.kind === 'crystal') {
+      glow = this.add.image(node.x, node.y, 'glow').setDepth(2);
+      this.tweens.add({ targets: glow, alpha: 0.35, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+    }
+    const sprite = this.add.image(node.x, node.y, node.kind).setRotation(node.angle).setDepth(4);
+    this.resources.set(node.id, { node, sprite, glow });
   }
 
   private interact() {
@@ -137,13 +202,17 @@ export class GameScene extends Phaser.Scene {
       this.tweens.killTweensOf(entry.glow);
       entry.glow.destroy();
     }
-    this.tweens.add({
-      targets: entry.sprite,
-      scale: 1.6,
-      alpha: 0,
-      y: entry.sprite.y - 6,
+    // Rise and fade in whole pixels (no scaling, to stay on the pixel grid).
+    const startY = entry.sprite.y;
+    this.tweens.addCounter({
+      from: 0,
+      to: 1,
       duration: 220,
       ease: 'Quad.out',
+      onUpdate: (tw) => {
+        const v = tw.getValue() ?? 0;
+        entry.sprite.setY(Math.round(startY - v * 6)).setAlpha(1 - v);
+      },
       onComplete: () => entry.sprite.destroy(),
     });
     this.game.events.emit(COLLECTED_EVENT, {
@@ -151,6 +220,82 @@ export class GameScene extends Phaser.Scene {
       amount: node.amount,
       inventory: this.inventory,
     } satisfies CollectedPayload);
+  }
+
+  private fire(time: number) {
+    this.lastFired = time;
+    // Fire where the turret actually points (it lags the cursor slightly).
+    const a = this.tank.turret.rotation;
+    const mx = this.tank.x + Math.cos(a) * CANNON.muzzleOffset;
+    const my = this.tank.y + Math.sin(a) * CANNON.muzzleOffset;
+
+    const shell = this.shells.create(mx, my, 'shell') as Phaser.Physics.Arcade.Image;
+    shell.setRotation(a).setDepth(13).setData('born', time);
+    const body = shell.body as Phaser.Physics.Arcade.Body;
+    body.setCircle(2, shell.width / 2 - 2, shell.height / 2 - 2);
+    body.setVelocity(Math.cos(a) * CANNON.speed, Math.sin(a) * CANNON.speed);
+
+    const flash = this.add.image(mx, my, 'flash').setDepth(13);
+    this.time.delayedCall(50, () => flash.destroy());
+  }
+
+  private impact(shell: Phaser.Physics.Arcade.Image) {
+    this.sparks.explode(5, shell.x, shell.y);
+    shell.destroy();
+  }
+
+  private onShellHit(shell: Phaser.Physics.Arcade.Image, drone: Drone) {
+    if (!shell.active || !this.drones.has(drone.placement.id)) return;
+    this.impact(shell);
+    if (drone.hit(CANNON.damage, this.tank, this.time.now)) this.destroyDrone(drone);
+  }
+
+  private destroyDrone(drone: Drone) {
+    const { x, y } = drone;
+    const p = drone.placement;
+    this.drones.delete(p.id);
+    drone.destroy();
+
+    this.sparks.explode(18, x, y);
+    for (let i = 0; i < 6; i++) this.dust.emitParticleAt(x + Phaser.Math.Between(-8, 8), y + Phaser.Math.Between(-8, 8), 1);
+    this.cameras.main.shake(120, 0.004);
+
+    if (p.drop > 0) {
+      this.addResourceNode({ id: `${p.id}-drop`, kind: 'scrap', amount: p.drop, x, y, angle: 0 });
+    }
+  }
+
+  private onDroneContact(drone: Drone) {
+    const now = this.time.now;
+    drone.knockFrom(this.tank, now);
+    if (now < this.invulnUntil) return;
+
+    this.invulnUntil = now + HULL.hitInvulnMs;
+    this.hull = applyDamage(this.hull, DRONES.contactDamage);
+    this.cameras.main.shake(150, 0.006);
+    this.sparks.explode(8, (this.tank.x + drone.x) / 2, (this.tank.y + drone.y) / 2);
+    if (this.hull <= 0) this.rescue('destroyed');
+  }
+
+  /** Returns the tank to the ship, repaired, minus a share of its salvage. */
+  rescue(reason: RescueReason) {
+    const { inventory, lost } = rescuePenalty(this.inventory, RESCUE.salvageLoss);
+    this.inventory = inventory;
+    this.hull = this.maxHull;
+    this.invulnUntil = this.time.now + 1500;
+
+    const { spawn } = this.world;
+    this.tank.reset(spawn.x, spawn.y);
+    for (const d of this.drones.values()) d.brain = { ...d.brain, mode: 'return' };
+
+    // Jump the camera instead of letting the follow smoothing cross the map.
+    const cam = this.cameras.main;
+    cam.stopFollow();
+    cam.centerOn(spawn.x, spawn.y);
+    cam.startFollow(this.tank.hull, true, CAMERA.lerp, CAMERA.lerp);
+    cam.fadeIn(500, 0, 0, 0);
+
+    this.game.events.emit(RESCUED_EVENT, { reason, lost } satisfies RescuedPayload);
   }
 
   private emitDust(delta: number) {
@@ -175,4 +320,8 @@ export class GameScene extends Phaser.Scene {
 function setCircleBody(img: Phaser.Physics.Arcade.Image, radius: number) {
   const body = img.body as Phaser.Physics.Arcade.StaticBody;
   body.setCircle(radius, img.width / 2 - radius, img.height / 2 - radius);
+}
+
+function droneOf(obj: unknown): Drone {
+  return (obj as Phaser.GameObjects.GameObject).getData('drone') as Drone;
 }

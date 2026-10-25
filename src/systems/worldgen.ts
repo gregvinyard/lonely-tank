@@ -1,5 +1,6 @@
 import { createRng, randRange } from './rng';
-import { OBSTACLES, RESOURCES, SHIP, WORLD_SIZE } from '../data/tuning';
+import { DRONES, OBSTACLES, RESOURCES, SHIP, WORLD_SIZE } from '../data/tuning';
+import { placeDrones, type DronePlacement } from './drone';
 import { placeResources, type ResourceNode } from './resources';
 
 export interface RockPlacement {
@@ -40,6 +41,7 @@ export interface World {
   spawn: { x: number; y: number };
   rocks: RockPlacement[];
   resources: ResourceNode[];
+  drones: DronePlacement[];
 }
 
 /** The full deterministic layout of the wasteland for a seed. */
@@ -64,5 +66,17 @@ export function generateWorld(seed: number): World {
     minSpacing: RESOURCES.minSpacing,
     kinds: { scrap: RESOURCES.scrap, crystal: RESOURCES.crystal },
   });
-  return { center, spawn: { x: center.x, y: center.y + SHIP.spawnOffsetY }, rocks, resources };
+  const drones = placeDrones({
+    seed: seed + 3, // resources use seed + 1 and + 2
+    count: DRONES.count,
+    worldSize: WORLD_SIZE,
+    margin: 64,
+    center,
+    minDistance: DRONES.minDistance,
+    avoid: rocks,
+    avoidRadius: DRONES.rockClearance,
+    minSpacing: DRONES.minSpacing,
+    dropChance: DRONES.scrapDropChance,
+  });
+  return { center, spawn: { x: center.x, y: center.y + SHIP.spawnOffsetY }, rocks, resources, drones };
 }

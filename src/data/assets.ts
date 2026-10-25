@@ -132,10 +132,67 @@ export const ASSETS: AssetDef[] = [
   {
     // Soft pulsing halo under crystals so they read from a distance.
     key: 'glow',
-    width: 32,
-    height: 32,
+    width: 64,
+    height: 64,
     placeholder: (g) => {
-      for (let r = 16; r > 0; r -= 2) g.fillStyle(r > 8 ? PALETTE.violet : PALETTE.teal, 0.1).fillCircle(16, 16, r);
+      for (let r = 32; r > 0; r -= 4) g.fillStyle(r > 16 ? PALETTE.violet : PALETTE.teal, 0.1).fillCircle(32, 32, r);
+    },
+  },
+  {
+    // Hostile sentry drone: round and symmetric, so it never needs rotating.
+    key: 'drone',
+    width: 48,
+    height: 48,
+    file: 'assets/drone.png',
+    placeholder: (g) => {
+      for (const [cx, cy] of [[10, 10], [38, 10], [10, 38], [38, 38]]) {
+        g.lineStyle(4, 0x2d283a).lineBetween(24, 24, cx, cy);
+        g.fillStyle(0x2d283a).fillCircle(cx, cy, 7);
+        g.fillStyle(0x464056).fillCircle(cx, cy, 5);
+      }
+      g.fillStyle(0x2d283a).fillCircle(24, 24, 12);
+      g.fillStyle(0x544a68).fillCircle(24, 24, 10);
+      g.fillStyle(PALETTE.violet).fillCircle(24, 24, 6);
+      g.fillStyle(0xe6463c).fillCircle(24, 24, 4);
+    },
+  },
+  {
+    // Soft ground shadow under hovering drones.
+    key: 'shadow',
+    width: 28,
+    height: 10,
+    placeholder: (g) => {
+      g.fillStyle(0x000000, 0.28).fillEllipse(14, 5, 28, 10);
+    },
+  },
+  {
+    // Cannon shell, pointing +X.
+    key: 'shell',
+    width: 8,
+    height: 4,
+    placeholder: (g) => {
+      g.fillStyle(0xf6d27a).fillRect(0, 1, 8, 2);
+      g.fillStyle(0xfff4d6).fillRect(4, 0, 3, 4);
+    },
+  },
+  {
+    // Muzzle flash.
+    key: 'flash',
+    width: 10,
+    height: 10,
+    placeholder: (g) => {
+      g.fillStyle(0xf6d27a).fillCircle(5, 5, 5);
+      g.fillStyle(0xfff4d6).fillCircle(5, 5, 3);
+    },
+  },
+  {
+    // Impact and explosion spark.
+    key: 'spark',
+    width: 3,
+    height: 3,
+    placeholder: (g) => {
+      g.fillStyle(0xf6a04a).fillRect(0, 0, 3, 3);
+      g.fillStyle(0xfff4d6).fillRect(1, 1, 1, 1);
     },
   },
   {

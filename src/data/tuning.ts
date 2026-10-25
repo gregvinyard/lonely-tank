@@ -68,3 +68,39 @@ export const RESOURCES = {
   minSpacing: 64, // px between resources
   interactRange: 44, // px from the tank's center
 } as const;
+
+export const HULL = {
+  max: 100,
+  hitInvulnMs: 600, // after any hit the tank can't be damaged again for this long
+} as const;
+
+export const CANNON = {
+  cooldownMs: 420,
+  speed: 420, // px/sec
+  lifetimeMs: 900, // ~380 px range
+  damage: 1,
+  muzzleOffset: 30, // px from the turret pivot to the barrel tip
+} as const;
+
+export const DRONES = {
+  count: 10,
+  hp: 3,
+  bodyRadius: 12,
+  // Homes keep the whole patrol area outside the ship's safe zone.
+  minDistance: SHIP.safeRadius + 120 + 160,
+  rockClearance: 56,
+  minSpacing: 220,
+  patrolRadius: 120,
+  patrolSpeed: 36,
+  chaseSpeed: 95, // well under the tank's 160 so the player can escape
+  detectRadius: 200,
+  loseRadius: 300,
+  leashRadius: 420, // give up a chase this far from home
+  contactDamage: 10,
+  knockback: 220, // px/sec pushed away from the tank on contact or hit
+  scrapDropChance: 0.6,
+} as const;
+
+export const RESCUE = {
+  salvageLoss: 0.25, // fraction of each carried resource lost, rounded down
+} as const;

@@ -23,7 +23,7 @@
 
 Developer feedback: movement feels good; the turret sat off-center on its pivot (developer edited the image; committed with M2).
 
-## M2 — Wasteland Exploration ✅ (awaiting playtest)
+## M2 — Wasteland Exploration ✅
 
 - Crashed spaceship at the world center with a visible safe zone; tank spawns beside it.
 - 28 scrap piles and 12 crystal clusters, deterministic with stable ids, kept off rocks and away from the ship.
@@ -33,12 +33,32 @@ Developer feedback: movement feels good; the turret sat off-center on its pivot 
 
 **Verified:** typecheck ✅, 33 unit tests ✅, 8 browser tests ✅ (adds: salvage with E, E with nothing nearby, compass shows/hides).
 
+Developer feedback: good; asked for everything to share one pixel resolution.
+
+## Pixel lock ✅
+
+- The game renders at a low virtual resolution, scaled up by a whole number of device pixels, so world, particles and HUD share one pixel grid (also under OS display scaling).
+- Built-in 5×7 pixel font for HUD text.
+
+## M3 — Hostile Encounters ✅ (awaiting playtest)
+
+- Cannon: hold left mouse, cooldown, shells hit rocks/ship/drones, muzzle flash and sparks.
+- 10 sentry drones: patrol, chase within range, give up on distance/leash/safe zone, never enter the safe zone.
+- Contact damage with a short invulnerability window; hull bar in the HUD.
+- Drones take 3 hits; explosion feedback; 60% drop scrap you can salvage with E.
+- Rescue on hull 0: back to the ship, repaired, minus 25% of salvage; banner explains what was lost.
+- PixelLab art: drone.
+
+**Verified:** typecheck ✅, 48 unit tests ✅, 13 browser tests ✅ (adds: shooting destroys a drone and leaves salvage, fire cooldown, rescue with penalty, drones stay out of the safe zone, window resize keeps the pixel grid).
+
 ## Next
 
-- Developer playtest of M2, then M3 — Hostile Encounters (cannon, drone enemy, rescue).
+- Developer playtest of M3, then M4 — Complete Expedition Loop (fuel, workshop, plating upgrade, saving).
 
 ## Known issues
 
 - Phaser 4.2.1 multi-texture batching bug under software WebGL: parts of the rotated turret went missing. Worked around with `render.maxTextures: 1`; guarded by `e2e/render.spec.ts`. Not reproduced on a real GPU (RTX 5080 / D3D11). Could be reported upstream.
 - Rocks and ground are still code-drawn placeholders.
 - Inventory resets on reload until the save system (M4).
+- Rescue on running out of fuel is built (`rescue('fuel')`) but fuel itself arrives in M4.
+- Escape to pause (in the spec's controls table) isn't scheduled in any milestone yet.
