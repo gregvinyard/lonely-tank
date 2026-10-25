@@ -74,9 +74,20 @@ Developer feedback: good; slow fuel use is fine for a casual exploration game.
 
 **Verified:** typecheck ✅, 84 unit tests ✅, 24 browser tests ✅ (adds: pause freezes drones/fuel/tank, Esc with the workshop open, mute survives reload, art loads from files with centered rock collision).
 
+Developer feedback: good; rocks needed size variety and jiggled while moving (fixed), tread dust invisible on the new ground (fixed).
+
+# v0.2 — Workshop & Wasteland (`docs/SPEC_v0.2.md`)
+
+## M6 — UI kit and graphical HUD ✅
+
+- Code-drawn pixel UI kit: nine-slice window, plate, button (3 states) and bar frames; 9×9 icons.
+- HUD rebuilt with it: framed stats panel with icon bars, framed goal/prompt/warning/compass/toast plates, framed banner with icon, framed pause screen and workshop (buttons with hover and disabled states).
+
+**Verified:** typecheck ✅, 88 unit tests ✅, 25 browser tests ✅ (adds: every HUD widget on whole pixels).
+
 ## Next
 
-- Developer playtest of M5. v0.1 is feature-complete per the spec.
+- M7 — Upgrade tree and workshop screen.
 
 ## Known issues
 

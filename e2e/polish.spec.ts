@@ -85,3 +85,24 @@ test('ground and rock art load from files and rocks collide where they are drawn
   expect(r.variants).toEqual(['rock', 'rock_2', 'rock_3', 'rock_l1', 'rock_l2', 'rock_s1', 'rock_s2']);
   expect(r.offCenter).toBeLessThan(0.5);
 });
+
+test('HUD widgets sit on whole pixels', async ({ page }) => {
+  await page.keyboard.press('e'); // workshop open, prompt hidden
+  await page.waitForTimeout(100);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(100);
+  const off = await read<string[]>(
+    page,
+    `(() => {
+      const bad = [];
+      const walk = (o, ox, oy, path) => {
+        const x = ox + o.x, y = oy + o.y;
+        if (o.visible && (!Number.isInteger(x) || !Number.isInteger(y))) bad.push(path + ' ' + x + ',' + y);
+        if (o.list) o.list.forEach((c, i) => walk(c, x, y, path + '/' + (c.type || i)));
+      };
+      ${HUD}.children.list.forEach((o, i) => walk(o, 0, 0, o.type + i));
+      return bad;
+    })()`,
+  );
+  expect(off).toEqual([]);
+});

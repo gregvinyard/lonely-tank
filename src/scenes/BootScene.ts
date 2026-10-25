@@ -1,5 +1,6 @@
 import * as Phaser from 'phaser';
 import { ASSETS } from '../data/assets';
+import { FRAMES, ICONS, mapPixels } from '../data/uiKit';
 import { createRng } from '../systems/rng';
 import { CELL_H, CELL_W, FONT_CHARS, FONT_COLS, FONT_KEY, fontPixels } from '../data/pixelFont';
 
@@ -31,6 +32,7 @@ export class BootScene extends Phaser.Scene {
       g.destroy();
     }
     this.createTerrain();
+    this.createUiKit();
     this.createPixelFont();
     this.scene.start('Game');
   }
@@ -53,6 +55,19 @@ export class BootScene extends Phaser.Scene {
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     tex.refresh();
+  }
+
+  /** Draws the code-defined UI frames and icons into textures. */
+  private createUiKit() {
+    for (const { key, rows } of [...FRAMES, ...ICONS]) {
+      const tex = this.textures.createCanvas(key, rows[0].length, rows.length)!;
+      const ctx = tex.getContext();
+      for (const [x, y, color] of mapPixels(rows)) {
+        ctx.fillStyle = color;
+        ctx.fillRect(x, y, 1, 1);
+      }
+      tex.refresh();
+    }
   }
 
   private createPixelFont() {

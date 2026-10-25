@@ -86,7 +86,7 @@ test('the workshop refuels, repairs and crafts the plating once', async ({ page 
   );
   expect(after).toMatchObject({ plating: true, maxHull: 125, hull: 100, inventory: { scrap: 0, crystal: 0 }, shells: shellsBefore });
   expect(after.banner).toContain('REINFORCED PLATING INSTALLED');
-  expect(await read<number>(page, `${HUD}.hullBar.bg.width`)).toBe(62); // 60 px bar + border
+  expect(await read<number>(page, `${HUD}.hullBar.bg.width`)).toBe(64); // 60 px bar + 2 px frame each side
   expect(await read<string>(page, `${HUD}.goal.text.text`)).toContain('PLATING INSTALLED');
 
   await page.evaluate(`${SCENE}.inventory = { scrap: 20, crystal: 20 }`);

@@ -101,6 +101,13 @@ Numbers live in `FUEL`, `WORKSHOP` and `SAVE` in `src/data/tuning.ts`.
 - **Hint bar:** shortened; fades after 45 s (the pause screen keeps the full list).
 - **Fixes:** static collision circles (rocks, ship) were 10–18 px up-left of their art (Phaser's `StaticBody.setCircle` ignores its offset; `setOffset` applies it). Keys pressed in the same frame could be handled twice (Phaser re-dispatches its per-frame key queue on every DOM key event); handlers are wrapped with `keyOnce`. Right-click menu disabled over the game; crosshair cursor.
 
+## UI kit (v0.2 M6)
+
+- Frames and HUD icons are pixel maps in `src/data/uiKit.ts`, drawn into textures at boot (like the font). Frames are nine-slice: fixed corners, edges that are one colour along their length so stretching never shows (unit-tested).
+- Frames: `ui_panel` (bevelled metal window with rivets and a teal trim), `ui_plate` (label plate), `ui_button` / `_hover` / `_disabled`, `ui_bar` (recessed bar track). Icons (9×9): hull, fuel, circuit, warning, upgrade.
+- Widgets in `src/ui/widgets.ts`: `Plate` (self-sizing text plate with optional icon), `Bar` (icon + track + fill; length grows with the maximum), `Button` (hover/focus/disabled states, mouse). All laid out from the top-left on whole pixels; a browser test walks the HUD and fails on any fractional position.
+- The compass stays above the prompt and hint plates; banners sit under the goal plate, or under the workshop while it's open.
+
 ## Debug
 
 - Add `?debug` to the URL to draw physics bodies.

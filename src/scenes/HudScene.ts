@@ -1,12 +1,12 @@
 import * as Phaser from 'phaser';
 import { sfx } from '../audio/sfx';
-import { FONT_KEY, toFontText } from '../data/pixelFont';
 import { keyOnce } from '../input/keyOnce';
-import { FUEL, HULL, PALETTE, WORKSHOP } from '../data/tuning';
+import { FUEL, HULL, WORKSHOP } from '../data/tuning';
 import { compassPlacement } from '../systems/compass';
 import type { Inventory } from '../systems/inventory';
 import type { ResourceKind } from '../systems/resources';
 import { applyAction, objectiveText, type WorkshopAction } from '../systems/workshop';
+import { Bar, Button, Plate, UI_TEXT, centerOn, frame, label } from '../ui/widgets';
 import {
   COLLECTED_EVENT,
   RESCUED_EVENT,
@@ -18,12 +18,10 @@ import {
   type WorkshopPayload,
 } from './GameScene';
 
-const COLOR = { text: 0xf3e3c3, dim: 0xc99668, accent: PALETTE.teal, hull: 0x7ec850, fuel: 0xf6a04a, danger: 0xe6463c } as const;
-/** Bar length for the base 100 hull; the bar grows with upgrades. */
+const COLOR = { ...UI_TEXT, hull: UI_TEXT.good } as const;
+/** Bar length for the base hull/fuel; bars grow with upgrades. */
 const BAR_W = 48;
-const BAR_X = 35;
 const LABELS: Record<ResourceKind, string> = { scrap: 'Scrap', crystal: 'Crystal' };
-const WORKSHOP_W = 228;
 const HINT_MS = 45000; // the short controls hint fades after this; the pause screen lists them all
 const CONTROLS: [string, string][] = [
   ['WASD', 'Drive'],
@@ -34,51 +32,49 @@ const CONTROLS: [string, string][] = [
   ['M', 'Sound on/off'],
   ['Esc / P', 'Pause'],
 ];
-const WORKSHOP_H = 118;
-
-interface Bar {
-  bg: Phaser.GameObjects.Rectangle;
-  fill: Phaser.GameObjects.Rectangle;
-  shown: string;
-}
+const WORKSHOP_W = 232;
+const WORKSHOP_H = 128;
 
 interface WorkshopRow {
   action: WorkshopAction;
-  bg: Phaser.GameObjects.Rectangle;
+  button: Button;
+  /** The button's frame; tests click its bounds. */
+  bg: Phaser.GameObjects.NineSlice;
   label: Phaser.GameObjects.BitmapText;
   cost: Phaser.GameObjects.BitmapText;
 }
 
-// Screen-space interface drawn over the Game scene. Positions and sizes are in
-// game pixels, the same grid as the world art, and text uses the pixel font.
+// Screen-space interface drawn over the Game scene, built from the pixel-art
+// UI kit. Positions and sizes are in game pixels on the same grid as the world.
 // It reads the Game scene's state each frame rather than owning any of it.
 export class HudScene extends Phaser.Scene {
   private game_!: GameScene;
   private counts!: Record<ResourceKind, Phaser.GameObjects.BitmapText>;
-  private panel!: Phaser.GameObjects.Rectangle;
+  private panel!: Phaser.GameObjects.NineSlice;
   private hullBar!: Bar;
   private fuelBar!: Bar;
   private shownHull = -1;
-  private goal!: ReturnType<HudScene['box']>;
-  prompt!: Phaser.GameObjects.Container;
-  private promptText!: Phaser.GameObjects.BitmapText;
-  private promptBg!: Phaser.GameObjects.Rectangle;
-  private safeZone!: Phaser.GameObjects.Container;
-  hint!: Phaser.GameObjects.Container;
+  private goal!: Plate;
+  prompt!: Plate;
+  promptText!: Phaser.GameObjects.BitmapText;
+  private safeZone!: Plate;
+  hint!: Plate;
   private compass!: Phaser.GameObjects.Graphics;
-  compassLabel!: Phaser.GameObjects.Container;
-  private compassText!: Phaser.GameObjects.BitmapText;
-  banner!: Phaser.GameObjects.Container;
-  private bannerText!: Phaser.GameObjects.BitmapText;
-  private bannerBg!: Phaser.GameObjects.Rectangle;
+  compassLabel!: Plate;
+  banner!: Plate;
+  bannerText!: Phaser.GameObjects.BitmapText;
   private bannerTimer?: Phaser.Time.TimerEvent;
   workshop!: Phaser.GameObjects.Container;
   private rows: WorkshopRow[] = [];
   workshopMessage!: Phaser.GameObjects.BitmapText;
   pauseMenu!: Phaser.GameObjects.Container;
-  private warning!: ReturnType<HudScene['box']>;
-  private toast!: ReturnType<HudScene['box']>;
+  private pauseDim!: Phaser.GameObjects.Rectangle;
+  private pausePanel!: Phaser.GameObjects.Container;
+  private warning!: Plate;
+  private toast!: Plate;
   private toastTimer?: Phaser.Time.TimerEvent;
+  /** Tracked here because scene.pause() only takes effect on the next step. */
+  paused = false;
 
   constructor() {
     super('Hud');
@@ -88,37 +84,24 @@ export class HudScene extends Phaser.Scene {
     this.game_ = this.scene.get('Game') as GameScene;
     this.shownHull = -1;
     this.paused = false;
+    this.rows = [];
 
-    this.panel = this.add.rectangle(4, 4, 0, 60, 0x000000, 0.55).setOrigin(0, 0);
-    this.text(9, 9, 'Hull');
-    this.hullBar = this.bar(9);
-    this.text(9, 20, 'Fuel');
-    this.fuelBar = this.bar(20);
-    // Half-size icons: nearest sampling keeps them on the grid.
-    this.add.image(14, 38, 'scrap').setScale(0.5);
-    this.add.image(14, 53, 'crystal').setScale(0.5);
-    this.counts = {
-      scrap: this.text(26, 34, ''),
-      crystal: this.text(26, 49, ''),
-    };
-    this.goal = this.box('', COLOR.dim);
-    this.setCounts(this.game_.inventory);
+    this.createStatsPanel();
+    this.goal = new Plate(this, '', { tint: COLOR.dim });
 
-    ({ container: this.prompt, text: this.promptText, bg: this.promptBg } = this.box('', COLOR.text, 15));
-    this.prompt.setVisible(false);
-
-    this.safeZone = this.box('Home base · safe zone', COLOR.accent).container;
-    this.hint = this.box('WASD drive · mouse aim · click fire · E use · Esc pause', COLOR.text).container;
+    this.prompt = new Plate(this, '', { minHeight: 17 }).setVisible(false);
+    this.promptText = this.prompt.text;
+    this.safeZone = new Plate(this, 'Home base · safe zone', { tint: COLOR.accent });
+    this.hint = new Plate(this, 'WASD drive · mouse aim · click fire · E use · Esc pause');
     this.time.delayedCall(HINT_MS, () => this.tweens.add({ targets: this.hint, alpha: 0, duration: 800 }));
-    this.warning = this.box('', COLOR.danger);
-    this.toast = this.box('', COLOR.text);
-    this.toast.container.setVisible(false);
+    this.warning = new Plate(this, '', { tint: COLOR.danger, icon: 'icon_warn' }).setVisible(false);
+    this.toast = new Plate(this, '').setVisible(false);
     this.compass = this.add.graphics();
-    ({ container: this.compassLabel, text: this.compassText } = this.box('', COLOR.accent));
+    this.compassLabel = new Plate(this, '', { tint: COLOR.accent });
 
     this.createWorkshop();
-    ({ container: this.banner, text: this.bannerText, bg: this.bannerBg } = this.box('', COLOR.danger, 24));
-    this.banner.setVisible(false);
+    this.banner = new Plate(this, '', { frameKey: 'ui_panel', padX: 9, padY: 9, tint: COLOR.danger }).setVisible(false).setDepth(5);
+    this.bannerText = this.banner.text;
     this.createPauseMenu();
 
     const kb = this.input.keyboard!;
@@ -149,81 +132,65 @@ export class HudScene extends Phaser.Scene {
       : g.docked && !g.workshopOpen
         ? '[E] Open workshop'
         : '';
-    this.prompt.setVisible(!!prompt).setPosition(Math.round(width / 2), height - 28);
+    this.prompt.setVisible(!!prompt);
     if (prompt) {
-      this.promptText.setText(toFontText(prompt));
-      this.promptBg.setSize(this.promptText.width + 10, 15).setOrigin(0.5);
+      if (this.promptText.text !== prompt.toUpperCase()) this.prompt.setLabel(prompt);
+      centerBottom(this.prompt, width, height - 32);
     }
 
-    this.safeZone.setVisible(g.inSafeZone && !g.workshopOpen).setPosition(Math.round(width / 2), 10);
+    this.safeZone.setVisible(g.inSafeZone && !g.workshopOpen);
+    centerOn(this.safeZone, width / 2, 12);
     this.updateWarning(width);
-    this.toast.container.setPosition(width - 4 - Math.round(this.toast.bg.width / 2), 10);
-    this.pauseMenu.setPosition(Math.round(width / 2), Math.round(height / 2));
-    (this.pauseMenu.first as Phaser.GameObjects.Rectangle).setSize(width + 2, height + 2);
-    this.hint.setPosition(Math.round(this.hint.width / 2) + 4, height - 10);
-    // Below the workshop panel while it's open, otherwise clear of the stats panel.
-    const bannerY = g.workshopOpen ? height / 2 + WORKSHOP_H / 2 + 16 : height / 3;
-    this.banner.setPosition(Math.round(width / 2), Math.round(bannerY));
+    this.toast.setPosition(width - 4 - this.toast.width, 4);
+    this.hint.setPosition(4, height - 4 - this.hint.height);
+    // Below the workshop panel while it's open, otherwise just under the goal plate.
+    const bannerTop = g.workshopOpen ? height / 2 + WORKSHOP_H / 2 + 6 : this.goal.y + this.goal.height + 6;
+    this.banner.setPosition(Math.round((width - this.banner.width) / 2), Math.round(bannerTop));
+    this.layoutPause(width, height);
     this.updateBars();
     this.updateGoal();
     this.updateWorkshop(width, height);
     this.drawCompass(width, height);
   }
 
-  private text(x: number, y: number, s: string, tint: number = COLOR.text) {
-    return this.add.bitmapText(x, y, FONT_KEY, toFontText(s)).setTint(tint);
-  }
-
-  /** A label on a dark strip, positioned by its center. */
-  private box(s: string, tint: number, height = 13) {
-    const text = this.text(0, 0, s, tint).setOrigin(0.5);
-    const bg = this.add.rectangle(0, 0, text.width + 8, height, 0x000000, 0.55);
-    const container = this.add.container(0, 0, [bg, text]);
-    container.setSize(bg.width, bg.height);
-    return { container, text, bg };
-  }
-
-  private bar(y: number): Bar {
-    const bg = this.add.rectangle(BAR_X, y, BAR_W + 2, 7, 0x000000).setOrigin(0, 0);
-    const fill = this.add.rectangle(BAR_X + 1, y + 1, BAR_W, 5, COLOR.hull).setOrigin(0, 0);
-    return { bg, fill, shown: '' };
-  }
-
-  /** Sizes a bar so its full length is proportional to `max`, in whole pixels. */
-  private setBar(bar: Bar, value: number, max: number, baseMax: number, color: number) {
-    const full = Math.round((BAR_W * max) / baseMax);
-    const filled = Math.max(value > 0 ? 1 : 0, Math.round((full * value) / max));
-    const key = `${full}:${filled}:${color}`;
-    if (key === bar.shown) return;
-    bar.shown = key;
-    bar.bg.setSize(full + 2, 7);
-    bar.fill.setSize(filled, 5).setFillStyle(color);
+  private createStatsPanel() {
+    this.panel = frame(this, 'ui_panel', 4, 4, 96, 68);
+    this.hullBar = new Bar(this, 10, 11, 'icon_hull', BAR_W, HULL.max);
+    this.fuelBar = new Bar(this, 10, 23, 'icon_fuel', BAR_W, FUEL.max);
+    // Half-size item icons: a 2:1 nearest downscale keeps them on the grid.
+    this.add.image(9, 34, 'scrap').setOrigin(0, 0).setScale(0.5);
+    this.add.image(9, 50, 'crystal').setOrigin(0, 0).setScale(0.5);
+    this.counts = {
+      scrap: label(this, 28, 39, ''),
+      crystal: label(this, 28, 55, ''),
+    };
+    this.setCounts(this.game_.inventory);
   }
 
   private updateBars() {
     const g = this.game_;
     if (g.hull < this.shownHull) this.cameras.main.flash(120, 120, 20, 20);
     this.shownHull = g.hull;
-    this.setBar(this.hullBar, g.hull, g.maxHull, HULL.max, g.hull / g.maxHull > 0.3 ? COLOR.hull : COLOR.danger);
+    this.hullBar.setValue(g.hull, g.maxHull, g.hull / g.maxHull > 0.3 ? COLOR.hull : COLOR.danger);
     const lowFuel = g.fuel / g.maxFuel <= FUEL.lowFraction;
     // The low-fuel bar blinks so it's noticed mid-fight.
     const blinkOff = lowFuel && Math.floor(this.time.now / 300) % 2 === 0;
-    this.setBar(this.fuelBar, g.fuel, g.maxFuel, FUEL.max, blinkOff ? 0x5a2a20 : lowFuel ? COLOR.danger : COLOR.fuel);
-    // The stats panel grows with the hull bar.
-    this.panel.setSize(Math.max(84, BAR_X + this.hullBar.bg.width + 1), 60);
+    this.fuelBar.setValue(g.fuel, g.maxFuel, blinkOff ? 0x5a2a20 : lowFuel ? COLOR.danger : COLOR.fuel);
+    // The stats panel grows with the longest bar or count.
+    const right = Math.max(
+      this.hullBar.x + this.hullBar.width,
+      this.fuelBar.x + this.fuelBar.width,
+      ...Object.values(this.counts).map((t) => t.x + Math.round(t.width)),
+    );
+    this.panel.setSize(right + 7 - this.panel.x, 68);
   }
 
   private updateGoal() {
     const g = this.game_;
-    const s = toFontText(objectiveText(g.inventory, g.plating, WORKSHOP_TUNING));
-    if (this.goal.text.text === s) return;
-    this.goal.text.setText(s);
-    this.goal.bg.setSize(this.goal.text.width + 8, 13).setOrigin(0.5);
-    this.goal.container.setPosition(4 + Math.round(this.goal.bg.width / 2), 73);
+    const s = objectiveText(g.inventory, g.plating, WORKSHOP_TUNING);
+    if (this.goal.text.text !== s.toUpperCase()) this.goal.setLabel(s);
+    this.goal.setPosition(4, this.panel.y + this.panel.height + 2);
   }
-
-  /** Tracked here because scene.pause() only takes effect on the next step. */
-  paused = false;
 
   togglePause() {
     this.paused = !this.paused;
@@ -238,16 +205,28 @@ export class HudScene extends Phaser.Scene {
   }
 
   private createPauseMenu() {
-    const dim = this.add.rectangle(0, 0, 10, 10, 0x000000, 0.55);
-    const panel = this.add.rectangle(0, 0, 200, 128, 0x000000, 0.8).setStrokeStyle(1, COLOR.accent, 0.7);
-    const parts: Phaser.GameObjects.GameObject[] = [dim, panel, this.text(0, -54, 'Paused', COLOR.accent).setOrigin(0.5)];
+    const w = 204;
+    const h = 136;
+    this.pauseDim = this.add.rectangle(0, 0, 10, 10, 0x000000, 0.55).setOrigin(0, 0);
+    const parts: Phaser.GameObjects.GameObject[] = [frame(this, 'ui_panel', 0, 0, w, h)];
+    const title = label(this, 0, 9, 'Paused', COLOR.accent);
+    title.setX(Math.round((w - title.width) / 2));
+    parts.push(title);
     CONTROLS.forEach(([key, what], i) => {
-      const y = -40 + i * 11;
-      parts.push(this.text(-90, y, key, COLOR.text), this.text(-14, y, what, COLOR.dim));
+      const y = 22 + i * 11;
+      parts.push(label(this, 12, y, key, COLOR.text), label(this, 86, y, what, COLOR.dim));
     });
-    parts.push(this.text(0, 44, 'Progress saves automatically', COLOR.dim).setOrigin(0.5));
-    parts.push(this.text(0, 55, '[Esc] resume', COLOR.text).setOrigin(0.5));
-    this.pauseMenu = this.add.container(0, 0, parts).setVisible(false).setDepth(10);
+    const saves = label(this, 0, 104, 'Progress saves automatically', COLOR.dim);
+    const resume = label(this, 0, 117, '[Esc] resume', COLOR.text);
+    for (const t of [saves, resume]) t.setX(Math.round((w - t.width) / 2));
+    parts.push(saves, resume);
+    this.pausePanel = this.add.container(0, 0, parts).setSize(w, h);
+    this.pauseMenu = this.add.container(0, 0, [this.pauseDim, this.pausePanel]).setVisible(false).setDepth(10);
+  }
+
+  private layoutPause(width: number, height: number) {
+    this.pauseDim.setSize(width, height);
+    centerOn(this.pausePanel, width / 2, height / 2);
   }
 
   private updateWarning(width: number) {
@@ -257,22 +236,16 @@ export class HudScene extends Phaser.Scene {
       if (g.fuel / g.maxFuel <= FUEL.lowFraction) s = 'Low fuel · return to ship';
       else if (g.hull / g.maxHull <= 0.3) s = 'Hull critical · repair at ship';
     }
-    this.warning.container.setVisible(!!s);
+    this.warning.setVisible(!!s);
     if (!s) return;
-    const text = toFontText(s);
-    if (this.warning.text.text !== text) {
-      this.warning.text.setText(text);
-      this.warning.bg.setSize(this.warning.text.width + 8, 13).setOrigin(0.5);
-    }
-    this.warning.container.setPosition(Math.round(width / 2), 10);
+    if (this.warning.text.text !== s.toUpperCase()) this.warning.setLabel(s);
+    centerOn(this.warning, width / 2, 12);
   }
 
   private showToast(message: string) {
-    this.toast.text.setText(toFontText(message));
-    this.toast.bg.setSize(this.toast.text.width + 8, 13).setOrigin(0.5);
-    this.toast.container.setVisible(true);
+    this.toast.setLabel(message).setVisible(true);
     this.toastTimer?.remove();
-    this.toastTimer = this.time.delayedCall(1500, () => this.toast.container.setVisible(false));
+    this.toastTimer = this.time.delayedCall(1500, () => this.toast.setVisible(false));
   }
 
   private createWorkshop() {
@@ -281,24 +254,28 @@ export class HudScene extends Phaser.Scene {
       ['repair', '[2] Repair'],
       ['plating', '[3] Craft reinforced plating'],
     ];
-    const left = -WORKSHOP_W / 2 + 6;
-    const bg = this.add.rectangle(0, 0, WORKSHOP_W, WORKSHOP_H, 0x000000, 0.8).setStrokeStyle(1, COLOR.accent, 0.7);
-    const title = this.text(0, -50, 'Workshop', COLOR.accent).setOrigin(0.5);
-    const parts: Phaser.GameObjects.GameObject[] = [bg, title];
-    items.forEach(([action, label], i) => {
-      const y = -38 + i * 24;
-      const rowBg = this.add.rectangle(0, y + 10, WORKSHOP_W - 8, 22, COLOR.accent, 0).setInteractive({ useHandCursor: true });
-      rowBg.on('pointerover', () => rowBg.setFillStyle(COLOR.accent, 0.15));
-      rowBg.on('pointerout', () => rowBg.setFillStyle(COLOR.accent, 0));
-      rowBg.on('pointerdown', () => this.game_.workshopAction(action));
-      const row: WorkshopRow = { action, bg: rowBg, label: this.text(left, y + 1, label), cost: this.text(left + 12, y + 11, '', COLOR.dim) };
+    const parts: Phaser.GameObjects.GameObject[] = [frame(this, 'ui_panel', 0, 0, WORKSHOP_W, WORKSHOP_H)];
+    const title = label(this, 0, 9, 'Workshop', COLOR.accent);
+    title.setX(Math.round((WORKSHOP_W - title.width) / 2));
+    parts.push(title);
+    items.forEach(([action, text], i) => {
+      const button = new Button(this, 6, 20 + i * 26, WORKSHOP_W - 12, 24, () => this.game_.workshopAction(action));
+      const row: WorkshopRow = {
+        action,
+        button,
+        bg: button.bg,
+        label: label(this, 6, 5, text),
+        cost: label(this, 14, 14, '', COLOR.dim),
+      };
+      button.add([row.label, row.cost]);
       this.rows.push(row);
-      parts.push(rowBg, row.label, row.cost);
+      parts.push(button);
     });
-    this.workshopMessage = this.text(0, 36, '', COLOR.accent).setOrigin(0.5);
-    const close = this.text(0, 49, '[E] or [Esc] close', COLOR.dim).setOrigin(0.5);
+    this.workshopMessage = label(this, 0, 100, '', COLOR.accent);
+    const close = label(this, 0, 113, '[E] or [Esc] close', COLOR.dim);
+    close.setX(Math.round((WORKSHOP_W - close.width) / 2));
     parts.push(this.workshopMessage, close);
-    this.workshop = this.add.container(0, 0, parts).setVisible(false);
+    this.workshop = this.add.container(0, 0, parts).setSize(WORKSHOP_W, WORKSHOP_H).setVisible(false);
   }
 
   private updateWorkshop(width: number, height: number) {
@@ -308,7 +285,8 @@ export class HudScene extends Phaser.Scene {
       this.workshop.setVisible(false);
       return;
     }
-    this.workshop.setVisible(true).setPosition(Math.round(width / 2), Math.round(height / 2));
+    centerOn(this.workshop.setVisible(true), width / 2, height / 2);
+    this.workshopMessage.setX(Math.round((WORKSHOP_W - this.workshopMessage.width) / 2));
     const r = WORKSHOP.repair;
     const p = WORKSHOP.plating;
     const costs: Record<WorkshopAction, string> = {
@@ -318,11 +296,12 @@ export class HudScene extends Phaser.Scene {
     };
     const status = { hull: g.hull, fuel: g.fuel, maxFuel: g.maxFuel, inventory: g.inventory, plating: g.plating };
     for (const row of this.rows) {
-      row.cost.setText(toFontText(costs[row.action]));
-      // Dim what can't be done right now.
+      const cost = costs[row.action].toUpperCase();
+      if (row.cost.text !== cost) row.cost.setText(cost);
+      // Grey out what can't be done right now.
       const can = applyAction(status, row.action, WORKSHOP_TUNING).ok;
-      row.label.setAlpha(can ? 1 : 0.45);
-      row.cost.setAlpha(can ? 1 : 0.45);
+      row.button.setEnabled(can);
+      row.label.setTint(can ? COLOR.text : COLOR.dim);
     }
   }
 
@@ -331,7 +310,9 @@ export class HudScene extends Phaser.Scene {
     const cam = g.cameras.main;
     const c = g.world.center;
     const target = { x: c.x - cam.worldView.x, y: c.y - cam.worldView.y };
-    const place = compassPlacement(target, { width, height }, 48, 18);
+    // Keep the compass above the prompt and hint plates along the bottom.
+    const floor = this.prompt.visible ? this.prompt.y : this.hint.alpha > 0 ? this.hint.y : height;
+    const place = compassPlacement(target, { width, height: floor - 4 }, 48, 18);
 
     this.compass.clear();
     this.compassLabel.setVisible(!!place);
@@ -344,22 +325,22 @@ export class HudScene extends Phaser.Scene {
     const tip = pt(7, 0);
     const left = pt(5, 2.5);
     const right = pt(5, -2.5);
-    this.compass.fillStyle(0x000000, 0.55).fillCircle(x, y, 10);
-    this.compass.lineStyle(1, COLOR.accent, 0.7).strokeCircle(x, y, 10);
+    this.compass.fillStyle(0x17151b, 0.92).fillCircle(x, y, 10);
+    this.compass.lineStyle(1, 0x5f636b).strokeCircle(x, y, 10);
+    this.compass.lineStyle(1, COLOR.accent, 0.8).strokeCircle(x, y, 8);
     this.compass.fillStyle(COLOR.accent).fillTriangle(tip.x, tip.y, left.x, left.y, right.x, right.y);
 
     const meters = Math.round(Math.hypot(g.tank.x - c.x, g.tank.y - c.y) / 10);
+    const s = `Ship ${meters}m`;
+    if (this.compassLabel.text.text !== s.toUpperCase()) this.compassLabel.setLabel(s);
     // Keep the label on the inward side of the arrow so it never leaves the screen.
-    this.compassText.setText(toFontText(`Ship ${meters}m`));
-    (this.compassLabel.first as Phaser.GameObjects.Rectangle).setSize(this.compassText.width + 8, 13).setOrigin(0.5);
-    this.compassLabel.setPosition(Math.round(x - Math.cos(angle) * 34), Math.round(y - Math.sin(angle) * 20));
+    centerOn(this.compassLabel, x - Math.cos(angle) * 36, y - Math.sin(angle) * 22);
   }
 
-  private showBanner(message: string, tint: number) {
-    this.bannerText.setText(toFontText(message)).setTint(tint);
+  private showBanner(message: string, tint: number, icon?: string) {
     this.bannerText.setCenterAlign();
-    this.bannerBg.setSize(this.bannerText.width + 12, this.bannerText.height + 8).setOrigin(0.5);
-    this.banner.setVisible(true);
+    this.banner.setIcon(icon);
+    this.banner.setLabel(message, tint).setVisible(true);
     this.bannerTimer?.remove();
     this.bannerTimer = this.time.delayedCall(3500, () => this.banner.setVisible(false));
   }
@@ -367,26 +348,26 @@ export class HudScene extends Phaser.Scene {
   private onRescued({ reason, lost }: RescuedPayload) {
     this.setCounts(this.game_.inventory);
     const why = reason === 'fuel' ? 'Out of fuel' : 'Tank disabled';
-    this.showBanner(`${why} · rescued to ship\nLost ${lost.scrap} scrap, ${lost.crystal} crystal`, COLOR.danger);
+    this.showBanner(`${why} · rescued to ship\nLost ${lost.scrap} scrap, ${lost.crystal} crystal`, COLOR.danger, 'icon_warn');
   }
 
   private onWorkshop({ action, ok, message }: WorkshopPayload) {
     this.setCounts(this.game_.inventory);
-    this.workshopMessage.setText(toFontText(message)).setTint(ok ? COLOR.accent : COLOR.danger);
+    this.workshopMessage.setText(message.toUpperCase()).setTint(ok ? COLOR.accent : COLOR.danger);
     if (ok && action === 'plating') {
-      this.showBanner(`Reinforced plating installed\nMax hull ${this.game_.maxHull} · objective complete`, COLOR.accent);
+      this.showBanner(`Reinforced plating installed\nMax hull ${this.game_.maxHull} · objective complete`, COLOR.accent, 'icon_up');
     }
   }
 
   private setCounts(inv: Inventory) {
-    this.counts.scrap.setText(toFontText(`Scrap   ${inv.scrap}`));
-    this.counts.crystal.setText(toFontText(`Crystal ${inv.crystal}`));
+    this.counts.scrap.setText(`SCRAP   ${inv.scrap}`);
+    this.counts.crystal.setText(`CRYSTAL ${inv.crystal}`);
   }
 
   private onCollected({ kind, amount, inventory }: CollectedPayload) {
     this.setCounts(inventory);
     const counter = this.counts[kind];
-    const toast = this.text(counter.x + counter.width + 6, counter.y, `+${amount}`, COLOR.accent);
+    const toast = label(this, counter.x + Math.round(counter.width) + 6, counter.y, `+${amount}`, COLOR.accent);
     this.tweens.add({
       targets: toast,
       y: toast.y - 8,
@@ -398,4 +379,9 @@ export class HudScene extends Phaser.Scene {
       onComplete: () => toast.destroy(),
     });
   }
+}
+
+/** Centers a plate horizontally with its bottom edge at `bottom`. */
+function centerBottom(p: Plate, width: number, bottom: number) {
+  p.setPosition(Math.round((width - p.width) / 2), Math.round(bottom - p.height));
 }
