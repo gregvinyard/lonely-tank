@@ -30,6 +30,7 @@ npm run dev        # dev server at http://localhost:5173
 |---|---|
 | W/A/S/D | Drive |
 | Mouse | Aim turret |
+| E | Salvage a nearby resource |
 
 More controls arrive with later milestones (see the spec). Add `?debug` to the URL to see physics bodies.
 

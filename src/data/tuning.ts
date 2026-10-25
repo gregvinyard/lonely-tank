@@ -50,3 +50,19 @@ export const OBSTACLES = {
   clearRadius: 220, // keep the spawn area around the world center open
   minSpacing: 80, // px between rock centers
 } as const;
+
+export const SHIP = {
+  // The crashed ship sits at the world center; the tank starts just south of it.
+  bodyRadius: 46, // collision circle, px
+  safeRadius: 200, // hostiles stay out of this circle (M3)
+  spawnOffsetY: 110,
+} as const;
+
+export const RESOURCES = {
+  scrap: { count: 28, minAmount: 1, maxAmount: 3, minDistance: 280 },
+  // Crystals are rarer and farther out, so they reward exploring.
+  crystal: { count: 12, minAmount: 1, maxAmount: 2, minDistance: 560 },
+  rockClearance: 48, // px between a resource and a rock center
+  minSpacing: 64, // px between resources
+  interactRange: 44, // px from the tank's center
+} as const;

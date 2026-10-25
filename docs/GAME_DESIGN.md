@@ -34,6 +34,29 @@ All numbers live in `TANK` in `src/data/tuning.ts`.
 - 70 rocks scattered deterministically from the world seed, ≥80 px apart, none within 220 px of the world center (spawn).
 - Circular static bodies (r = 22).
 
+## Spaceship (M2)
+
+- Crashed ship fixed at the world center; circular collision body (r = 46) so the tank can't drive through it.
+- Safe zone: 200 px circle, shown as a faint teal ring and a "HOME BASE · SAFE ZONE" HUD tag while inside. Hostiles (M3) will be kept out of it.
+- The tank spawns 110 px south of the ship.
+- No workshop yet (M4).
+
+## Resources (M2)
+
+All numbers live in `RESOURCES` in `src/data/tuning.ts`; placement is `generateWorld()` in `src/systems/worldgen.ts`.
+
+- 28 scrap piles (1–3 scrap each), at least 280 px from the ship.
+- 12 crystal clusters (1–2 crystals each), at least 560 px from the ship, so they reward exploring. They pulse with a violet/teal halo to read from a distance.
+- Each kind has its own RNG stream; nodes stay ≥48 px from rock centers and ≥64 px from each other.
+- Stable ids (`scrap-00`, `crystal-07`, …) for the M4 save system.
+- Not solid: drive over them. Within 44 px of the tank's center, the HUD prompts `[E] Salvage …`; E collects the nearest one.
+
+## HUD (M2)
+
+- Top-left: scrap and crystal counts (with a `+N` pop on pickup) and the current goal.
+- Bottom-center: interaction prompt.
+- Compass: when the ship is off screen, a teal arrow sits on the screen edge pointing to it, with the distance (1 m = 10 px).
+
 ## Debug
 
 - Add `?debug` to the URL to draw physics bodies.

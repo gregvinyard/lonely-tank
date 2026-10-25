@@ -1,4 +1,6 @@
 import { createRng, randRange } from './rng';
+import { OBSTACLES, RESOURCES, SHIP, WORLD_SIZE } from '../data/tuning';
+import { placeResources, type ResourceNode } from './resources';
 
 export interface RockPlacement {
   x: number;
@@ -31,4 +33,36 @@ export function placeRocks(o: RockOptions): RockPlacement[] {
     rocks.push({ x, y, angle });
   }
   return rocks;
+}
+
+export interface World {
+  center: { x: number; y: number };
+  spawn: { x: number; y: number };
+  rocks: RockPlacement[];
+  resources: ResourceNode[];
+}
+
+/** The full deterministic layout of the wasteland for a seed. */
+export function generateWorld(seed: number): World {
+  const center = { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 };
+  const rocks = placeRocks({
+    seed,
+    count: OBSTACLES.rockCount,
+    worldSize: WORLD_SIZE,
+    margin: 48,
+    center,
+    clearRadius: OBSTACLES.clearRadius,
+    minSpacing: OBSTACLES.minSpacing,
+  });
+  const resources = placeResources({
+    seed,
+    worldSize: WORLD_SIZE,
+    margin: 48,
+    center,
+    avoid: rocks,
+    avoidRadius: RESOURCES.rockClearance,
+    minSpacing: RESOURCES.minSpacing,
+    kinds: { scrap: RESOURCES.scrap, crystal: RESOURCES.crystal },
+  });
+  return { center, spawn: { x: center.x, y: center.y + SHIP.spawnOffsetY }, rocks, resources };
 }

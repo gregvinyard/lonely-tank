@@ -77,6 +77,68 @@ export const ASSETS: AssetDef[] = [
     },
   },
   {
+    // Crashed ship, nose pointing up-right. Collision is a circle at the center.
+    key: 'spaceship',
+    file: 'assets/spaceship.png',
+    width: 128,
+    height: 128,
+    placeholder: (g) => {
+      // Scorched ground and skid
+      g.fillStyle(0x000000, 0.22).fillEllipse(66, 70, 120, 96);
+      g.fillStyle(0x3a2a22, 0.5).fillEllipse(40, 96, 50, 26);
+      // Wings
+      g.fillStyle(PALETTE.metalDark).fillTriangle(22, 58, 64, 40, 70, 82).fillTriangle(70, 82, 52, 112, 92, 76);
+      g.fillStyle(PALETTE.metal).fillTriangle(28, 60, 62, 46, 66, 76).fillTriangle(72, 84, 58, 104, 88, 78);
+      // Fuselage
+      g.fillStyle(PALETTE.metalDark).fillEllipse(66, 62, 92, 40);
+      g.fillStyle(0x9aa0a6).fillEllipse(66, 60, 84, 32);
+      g.fillStyle(PALETTE.rust).fillRect(44, 54, 30, 12);
+      // Cockpit and engines
+      g.fillStyle(PALETTE.teal).fillEllipse(100, 58, 18, 12);
+      g.fillStyle(0x2c2e31).fillRect(18, 52, 10, 8).fillRect(18, 64, 10, 8);
+      g.fillStyle(PALETTE.violet).fillRect(16, 54, 3, 4).fillRect(16, 66, 3, 4);
+      // Hull breach
+      g.fillStyle(0x1a1210).fillTriangle(56, 66, 70, 62, 62, 74);
+    },
+  },
+  {
+    // Pile of salvage metal.
+    key: 'scrap',
+    file: 'assets/scrap.png',
+    width: 32,
+    height: 32,
+    placeholder: (g) => {
+      g.fillStyle(0x000000, 0.25).fillEllipse(17, 19, 26, 18);
+      g.fillStyle(PALETTE.metalDark).fillRect(6, 12, 14, 9);
+      g.fillStyle(PALETTE.metal).fillRect(12, 8, 12, 8).fillTriangle(8, 22, 18, 18, 14, 26);
+      g.fillStyle(PALETTE.rust).fillRect(18, 16, 8, 7).fillRect(9, 13, 4, 3);
+      g.fillStyle(0xb8bcc0).fillRect(13, 9, 6, 2);
+    },
+  },
+  {
+    // Cluster of glowing energy crystals.
+    key: 'crystal',
+    file: 'assets/crystal.png',
+    width: 32,
+    height: 32,
+    placeholder: (g) => {
+      g.fillStyle(0x000000, 0.25).fillEllipse(16, 20, 22, 14);
+      g.fillStyle(0x4b2f7a).fillTriangle(8, 22, 12, 8, 16, 22).fillTriangle(16, 23, 22, 6, 26, 21);
+      g.fillStyle(PALETTE.violet).fillTriangle(10, 21, 12, 10, 15, 21).fillTriangle(18, 22, 22, 9, 24, 20);
+      g.fillStyle(PALETTE.teal).fillTriangle(12, 24, 16, 12, 20, 24);
+      g.fillStyle(0xa8f0e6).fillRect(15, 14, 2, 6);
+    },
+  },
+  {
+    // Soft pulsing halo under crystals so they read from a distance.
+    key: 'glow',
+    width: 32,
+    height: 32,
+    placeholder: (g) => {
+      for (let r = 16; r > 0; r -= 2) g.fillStyle(r > 8 ? PALETTE.violet : PALETTE.teal, 0.1).fillCircle(16, 16, r);
+    },
+  },
+  {
     // Soft dust puff kicked up by the treads.
     key: 'dust',
     width: 8,

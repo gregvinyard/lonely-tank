@@ -1,12 +1,30 @@
 import * as Phaser from 'phaser';
-import { CAMERA, OBSTACLES, WORLD_SEED, WORLD_SIZE, frameLerp, zoomForViewport } from '../data/tuning';
+import { CAMERA, OBSTACLES, PALETTE, RESOURCES, SHIP, WORLD_SEED, WORLD_SIZE, frameLerp, zoomForViewport } from '../data/tuning';
 import { Tank } from '../entities/Tank';
-import { placeRocks } from '../systems/worldgen';
+import { addResource, createInventory, type Inventory } from '../systems/inventory';
+import { nearestInRange, type ResourceKind, type ResourceNode } from '../systems/resources';
+import { generateWorld, type World } from '../systems/worldgen';
 
-type Keys = Record<'up' | 'down' | 'left' | 'right', Phaser.Input.Keyboard.Key>;
+type Keys = Record<'up' | 'down' | 'left' | 'right' | 'interact', Phaser.Input.Keyboard.Key>;
+
+/** Emitted on game.events when the player salvages a node. */
+export const COLLECTED_EVENT = 'resource-collected';
+export interface CollectedPayload {
+  kind: ResourceKind;
+  amount: number;
+  inventory: Inventory;
+}
 
 export class GameScene extends Phaser.Scene {
-  private tank!: Tank;
+  world!: World;
+  tank!: Tank;
+  inventory: Inventory = createInventory();
+  /** Uncollected resource nodes by stable id. */
+  readonly resources = new Map<string, { node: ResourceNode; sprite: Phaser.GameObjects.Image; glow?: Phaser.GameObjects.Image }>();
+  /** The node the tank is close enough to salvage, if any. */
+  nearby: ResourceNode | undefined;
+  inSafeZone = true;
+
   private keys!: Keys;
   private dust!: Phaser.GameObjects.Particles.ParticleEmitter;
   private dustDistance = 0;
@@ -16,26 +34,41 @@ export class GameScene extends Phaser.Scene {
   }
 
   create() {
-    const center = { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 };
+    this.world = generateWorld(WORLD_SEED);
+    this.inventory = createInventory();
+    this.resources.clear();
+    const { center } = this.world;
 
     this.physics.world.setBounds(0, 0, WORLD_SIZE, WORLD_SIZE);
     this.add.tileSprite(0, 0, WORLD_SIZE, WORLD_SIZE, 'terrain_ground').setOrigin(0, 0);
 
-    const rocks = this.physics.add.staticGroup();
-    for (const r of placeRocks({
-      seed: WORLD_SEED,
-      count: OBSTACLES.rockCount,
-      worldSize: WORLD_SIZE,
-      margin: 48,
-      center,
-      clearRadius: OBSTACLES.clearRadius,
-      minSpacing: OBSTACLES.minSpacing,
-    })) {
-      const rock = rocks.create(r.x, r.y, 'rock') as Phaser.Physics.Arcade.Image;
+    // Faint ring marking the ship's safe zone.
+    this.add
+      .circle(center.x, center.y, SHIP.safeRadius)
+      .setStrokeStyle(2, PALETTE.teal, 0.25)
+      .setFillStyle(PALETTE.teal, 0.04)
+      .setDepth(1);
+
+    const solids = this.physics.add.staticGroup();
+    for (const r of this.world.rocks) {
+      const rock = solids.create(r.x, r.y, 'rock') as Phaser.Physics.Arcade.Image;
       rock.setRotation(r.angle).setDepth(5);
-      const body = rock.body as Phaser.Physics.Arcade.StaticBody;
-      const rad = OBSTACLES.rockRadius;
-      body.setCircle(rad, rock.width / 2 - rad, rock.height / 2 - rad);
+      setCircleBody(rock, OBSTACLES.rockRadius);
+    }
+    // Scorched crash site under the ship.
+    this.add.ellipse(center.x - 8, center.y + 4, 150, 80, 0x2a1a14, 0.35).setDepth(1);
+    const ship = solids.create(center.x, center.y, 'spaceship') as Phaser.Physics.Arcade.Image;
+    ship.setDepth(6);
+    setCircleBody(ship, SHIP.bodyRadius);
+
+    for (const node of this.world.resources) {
+      let glow: Phaser.GameObjects.Image | undefined;
+      if (node.kind === 'crystal') {
+        glow = this.add.image(node.x, node.y, 'glow').setDepth(2).setScale(2);
+        this.tweens.add({ targets: glow, alpha: 0.35, scale: 2.4, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+      }
+      const sprite = this.add.image(node.x, node.y, node.kind).setRotation(node.angle).setDepth(4);
+      this.resources.set(node.id, { node, sprite, glow });
     }
 
     this.dust = this.add.particles(0, 0, 'dust', {
@@ -47,8 +80,8 @@ export class GameScene extends Phaser.Scene {
     });
     this.dust.setDepth(8);
 
-    this.tank = new Tank(this, center.x, center.y);
-    this.physics.add.collider(this.tank.hull, rocks);
+    this.tank = new Tank(this, this.world.spawn.x, this.world.spawn.y);
+    this.physics.add.collider(this.tank.hull, solids);
 
     const cam = this.cameras.main;
     cam.setBounds(0, 0, WORLD_SIZE, WORLD_SIZE);
@@ -59,7 +92,8 @@ export class GameScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.scale.off(Phaser.Scale.Events.RESIZE, applyZoom));
 
     const kb = this.input.keyboard!;
-    this.keys = kb.addKeys({ up: 'W', down: 'S', left: 'A', right: 'D' }) as Keys;
+    this.keys = kb.addKeys({ up: 'W', down: 'S', left: 'A', right: 'D', interact: 'E' }) as Keys;
+    this.keys.interact.on('down', () => this.interact());
 
     this.scene.launch('Hud');
 
@@ -88,6 +122,39 @@ export class GameScene extends Phaser.Scene {
     const l = frameLerp(CAMERA.lerp, delta);
     this.cameras.main.setLerp(l, l);
     this.emitDust(delta);
+
+    const nodes = Array.from(this.resources.values(), (r) => r.node);
+    this.nearby = nearestInRange(this.tank, nodes, RESOURCES.interactRange);
+    const c = this.world.center;
+    this.inSafeZone = Math.hypot(this.tank.x - c.x, this.tank.y - c.y) < SHIP.safeRadius;
+  }
+
+  private interact() {
+    const node = this.nearby;
+    if (!node) return;
+    const entry = this.resources.get(node.id)!;
+    this.resources.delete(node.id);
+    this.nearby = undefined;
+    this.inventory = addResource(this.inventory, node.kind, node.amount);
+
+    if (entry.glow) {
+      this.tweens.killTweensOf(entry.glow);
+      entry.glow.destroy();
+    }
+    this.tweens.add({
+      targets: entry.sprite,
+      scale: 1.6,
+      alpha: 0,
+      y: entry.sprite.y - 6,
+      duration: 220,
+      ease: 'Quad.out',
+      onComplete: () => entry.sprite.destroy(),
+    });
+    this.game.events.emit(COLLECTED_EVENT, {
+      kind: node.kind,
+      amount: node.amount,
+      inventory: this.inventory,
+    } satisfies CollectedPayload);
   }
 
   private emitDust(delta: number) {
@@ -107,4 +174,9 @@ export class GameScene extends Phaser.Scene {
       this.dust.emitParticleAt(this.tank.x + lx * cos - ly * sin, this.tank.y + lx * sin + ly * cos, 1);
     }
   }
+}
+
+function setCircleBody(img: Phaser.Physics.Arcade.Image, radius: number) {
+  const body = img.body as Phaser.Physics.Arcade.StaticBody;
+  body.setCircle(radius, img.width / 2 - radius, img.height / 2 - radius);
 }
