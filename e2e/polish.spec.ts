@@ -45,15 +45,16 @@ test('Esc pauses everything and resumes', async ({ page }) => {
   expect(Math.abs((await read<number>(page, `${SCENE}.tank.x`)) - before.tx)).toBeGreaterThan(10);
 });
 
-test('Esc with the workshop open only closes the workshop', async ({ page }) => {
+test('Esc in the ship leaves it instead of pausing', async ({ page }) => {
   await page.keyboard.press('e');
-  await page.waitForTimeout(80);
-  expect(await read<boolean>(page, `${SCENE}.workshopOpen`)).toBe(true);
+  await page.waitForFunction(`${SCENE}.workshopOpen && ${HUD}.workshop.visible`, null, { timeout: 5000 });
   await page.keyboard.press('Escape');
   await page.waitForTimeout(80);
   expect(await read<boolean>(page, `${SCENE}.workshopOpen`)).toBe(false);
+  expect(await read<string>(page, `${SCENE}.shipState`)).toBe('exiting');
   expect(await read<boolean>(page, `${HUD}.paused`)).toBe(false);
   expect(await read<boolean>(page, `${HUD}.pauseMenu.visible`)).toBe(false);
+  await page.waitForFunction(`${SCENE}.shipState === 'outside'`, null, { timeout: 5000 });
 });
 
 test('mute is remembered across reloads', async ({ page }) => {
@@ -76,7 +77,7 @@ test('ground and rock art load from files and rocks collide where they are drawn
       return {
         // Every manifest entry with a file must load as an image (placeholders are canvases drawn at boot).
         sources: (() => {
-          const keys = s.textures.getTextureKeys().filter((k) => /^(terrain_ground|rock|up_|circuit|scrap|crystal|drone|spaceship|tank_|burrower$|mound$)/.test(k));
+          const keys = s.textures.getTextureKeys().filter((k) => /^(terrain_ground|rock|up_|circuit|scrap|crystal|drone|spaceship|ship_door|tank_|burrower$|mound$)/.test(k));
           return { count: keys.length, placeholders: keys.filter((k) => !(src(k) instanceof HTMLImageElement)) };
         })(),
         variants: [...new Set(rocks.map((b) => b.gameObject.texture.key))].sort(),
@@ -85,7 +86,7 @@ test('ground and rock art load from files and rocks collide where they are drawn
     })()`,
   );
   // One texture per PNG in public/assets, none of them a fallback placeholder.
-  expect(r.sources).toEqual({ count: 25, placeholders: [] });
+  expect(r.sources).toEqual({ count: 26, placeholders: [] });
   expect(r.variants).toEqual(['rock', 'rock_2', 'rock_3', 'rock_l1', 'rock_l2', 'rock_s1', 'rock_s2']);
   expect(r.offCenter).toBeLessThan(0.5);
 });

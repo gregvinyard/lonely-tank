@@ -12,6 +12,12 @@ async function press(page: Page, key: string) {
   await page.waitForTimeout(80);
 }
 
+/** Drives into the ship (the tank starts by its door) and waits for the menu. */
+async function enter(page: Page) {
+  await page.keyboard.press('e');
+  await page.waitForFunction(`${SCENE}.workshopOpen && ${HUD}.workshop.visible`, null, { timeout: 5000 });
+}
+
 /** Screen position (CSS px) of a HUD object's center. */
 async function screenCenter(page: Page, expr: string) {
   const box = (await page.locator('canvas').boundingBox())!;
@@ -28,9 +34,9 @@ test.beforeEach(async ({ page }) => {
   await page.locator('canvas').click({ position: { x: 5, y: 5 } });
 });
 
-test('services: E opens the workshop, 1 refuels, 2 repairs', async ({ page }) => {
-  expect(await read<string>(page, `${HUD}.promptText.text`)).toBe('[E] OPEN WORKSHOP');
-  await press(page, 'e');
+test('services: E takes the tank into the ship, 1 refuels, 2 repairs', async ({ page }) => {
+  expect(await read<string>(page, `${HUD}.promptText.text`)).toBe('[E] ENTER SHIP · OR DRIVE IN');
+  await enter(page);
   expect(await read<boolean>(page, `${HUD}.workshop.visible`)).toBe(true);
   await page.evaluate(`(() => { const s = ${SCENE}; s.fuel = 40; s.hull = 50; s.inventory = { scrap: 4, crystal: 0, circuit: 0 }; })()`);
   await press(page, '1');
@@ -39,7 +45,7 @@ test('services: E opens the workshop, 1 refuels, 2 repairs', async ({ page }) =>
 });
 
 test('keyboard: select a card and build it with Space', async ({ page }) => {
-  await press(page, 'e');
+  await enter(page);
   await page.evaluate(`${SCENE}.inventory = { scrap: 8, crystal: 2, circuit: 0 }`);
   await press(page, 'Space'); // plating is selected first
   const r = await read<Record<string, unknown>>(
@@ -58,7 +64,7 @@ test('keyboard: select a card and build it with Space', async ({ page }) => {
 });
 
 test('a locked line explains its requirement', async ({ page }) => {
-  await press(page, 'e');
+  await enter(page);
   await page.evaluate(`${SCENE}.inventory = ${RICH}`);
   // AP shells: second row, second column.
   await press(page, 'ArrowDown');
@@ -70,7 +76,7 @@ test('a locked line explains its requirement', async ({ page }) => {
 });
 
 test('mouse: click a card, then Build, without firing the cannon', async ({ page }) => {
-  await press(page, 'e');
+  await enter(page);
   await page.evaluate(`${SCENE}.inventory = ${RICH}`);
   const shells = await read<number>(page, `${SCENE}.shells.getLength()`);
   const card = await screenCenter(page, `${HUD}.workshop.cards[2].bg`); // engine
@@ -95,11 +101,11 @@ test('upgrades change how the tank drives and shoots', async ({ page }) => {
   expect(st.damage).toBe(3);
   expect(st.cooldownMs).toBe(Math.round(420 * 0.7));
 
-  // Full throttle reaches the upgraded top speed (driving away from the ship, inside the rock-free clearing).
-  await page.keyboard.down('s');
+  // Full throttle reaches the upgraded top speed (driving west from the door, across open ground).
+  await page.keyboard.down('a');
   await page.waitForTimeout(600);
   const speed = await read<number>(page, `${SCENE}.tank.speed`);
-  await page.keyboard.up('s');
+  await page.keyboard.up('a');
   expect(speed).toBeGreaterThan(200);
 
   // One AP shell destroys a drone (3 hp).
@@ -136,7 +142,7 @@ test('the whole tree can be built to the top of the goal ladder', async ({ page 
 });
 
 test('clicks where the closed workshop buttons were do nothing', async ({ page }) => {
-  await press(page, 'e');
+  await enter(page);
   const spots = [
     await screenCenter(page, `${HUD}.workshop.buildButton.bg`),
     await screenCenter(page, `${HUD}.workshop.services[0].bg`),

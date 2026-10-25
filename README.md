@@ -6,7 +6,7 @@ Salvage scrap, crystals and circuits, fight off sentry drones, and climb an eigh
 
 Built with [Phaser 4](https://phaser.io) + TypeScript + Vite. Hosted on Cloudflare Workers (static assets).
 
-See [`docs/SPEC.md`](docs/SPEC.md) (v0.1), [`docs/SPEC_v0.2.md`](docs/SPEC_v0.2.md) and [`docs/SPEC_v0.3.md`](docs/SPEC_v0.3.md) for the design specifications, [`docs/GAME_DESIGN.md`](docs/GAME_DESIGN.md) for the numbers, and [`docs/PROGRESS.md`](docs/PROGRESS.md) for current status.
+See [`docs/SPEC.md`](docs/SPEC.md) (v0.1), [`docs/SPEC_v0.2.md`](docs/SPEC_v0.2.md) , [`docs/SPEC_v0.3.md`](docs/SPEC_v0.3.md) and [`docs/SPEC_v0.4.md`](docs/SPEC_v0.4.md) for the design specifications, [`docs/GAME_DESIGN.md`](docs/GAME_DESIGN.md) for the numbers, and [`docs/PROGRESS.md`](docs/PROGRESS.md) for current status.
 
 ## Local development
 

@@ -130,9 +130,20 @@ Developer feedback: good; rocks needed size variety and jiggled while moving (fi
 
 **Verified:** typecheck ✅, 124 unit tests ✅ (adds burrower placement and behaviour), 43 browser tests ✅ (adds: shells fly over a buried burrower, a surfaced one can be shot and drops crystal, it only bites after surfacing, the trail fades, destroyed burrowers survive a reload and return).
 
+## M12 — The ship you drive into ✅ (v0.4, `docs/SPEC_v0.4.md`)
+
+- New 320×256 PixelLab ship, about 2.5× bigger, with a cargo door that slides open as the tank approaches.
+- Driving into the doorway (or pressing E by it) rolls the tank inside; the ship menu (workshop) opens. Leaving the menu (E, Esc or the Leave ship button) rolls the tank back out, facing away, with a moment of invulnerability.
+- No more safe-zone ring: you're safe only inside the ship. Hostiles calm down when you go in; drones can now follow you right up to the hull.
+- Compound hull collision; drones steer around it, burrowers never tunnel under it.
+- The world is unchanged (locked by a fixture test). Old saves with the tank where the ship now stands load it outside the door.
+- Game saves at start-up; saves made inside store the spot outside the door.
+
+**Verified:** typecheck ✅, 133 unit tests ✅ (adds the world-layout lock, door logic, hull geometry and rock gaps), 49 browser tests ✅ (adds: door opens and shuts, driving in opens the menu and calms drones, the Leave ship button rolls the tank out facing south without firing, the hull is solid, old save relocation, saving from inside). The changed browser specs passed 3 times in a row.
+
 ## Next
 
-- Developer playtest of v0.3.
+- Developer playtest of v0.4.
 
 ## Known issues
 

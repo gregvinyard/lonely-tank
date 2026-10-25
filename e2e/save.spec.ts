@@ -36,13 +36,14 @@ test('progress survives a reload', async ({ page }) => {
       return { node: node.id, picked: a.placement.id, left: b.placement.id, chip: { x: chip.x, y: chip.y } };
     })()`,
   );
-  // Building at the workshop saves.
+  // Building in the ship saves.
   await press(page, 'e');
+  await page.waitForFunction(`${SCENE}.workshopOpen && ${HUD}.workshop.visible`, null, { timeout: 5000 });
   await press(page, 'Space');
   expect(await read<number>(page, `${SCENE}.levels.plating`)).toBe(1);
   await press(page, 'e');
 
-  // Leave the dock (staying in the safe zone, away from drones); closing the page saves the tank where it is.
+  // Park beside the ship (away from drones); closing the page saves the tank where it is.
   const parked = await read<{ x: number; y: number }>(
     page,
     `(() => { const s = ${SCENE}; const p = { x: s.world.center.x + 170, y: s.world.center.y }; s.tank.reset(p.x, p.y); s.hull = 64; s.fuel = 37.5; return p; })()`,
@@ -139,7 +140,7 @@ test('a corrupted save is ignored and a fresh game starts', async ({ page }) => 
   expect(r).toEqual({ inventory: { scrap: 0, crystal: 0, circuit: 0 }, resources: true, drones: 10, built: 0, maxHull: 100, fuel: 100 });
   expect(warnings.some((w) => w.includes('unreadable save'))).toBe(true);
   expect(warnings.some((w) => w.startsWith('ERROR'))).toBe(false);
-  // Docking at the start replaced the garbage with a valid save.
+  // Starting the game replaced the garbage with a valid save.
   expect(await read<number>(page, `JSON.parse(localStorage.getItem('lonely-tank.save')).version`)).toBe(2);
 });
 

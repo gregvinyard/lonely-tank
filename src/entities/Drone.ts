@@ -1,6 +1,6 @@
 import * as Phaser from 'phaser';
 import { DRONES } from '../data/tuning';
-import { alertBrain, calmBrain, clampOutsideCircle, newBrain, stepDrone, type DroneBrain, type DronePlacement, type Vec } from '../systems/drone';
+import { alertBrain, calmBrain, newBrain, stepDrone, type DroneBrain, type DronePlacement, type Vec } from '../systems/drone';
 import { createRng } from '../systems/rng';
 import type { Circle } from '../systems/steer';
 
@@ -46,18 +46,13 @@ export class Drone {
     return this.sprite.y;
   }
 
-  update(now: number, dtMs: number, player: Vec, playerSafe: boolean, safeCenter: Vec, safeRadius: number, obstacles: readonly Circle[]) {
+  update(now: number, dtMs: number, player: Vec, playerSafe: boolean, obstacles: readonly Circle[]) {
     const pos = { x: this.x, y: this.y };
     const speed = dtMs > 0 ? (Math.hypot(pos.x - this.last.x, pos.y - this.last.y) * 1000) / dtMs : 0;
     this.last = pos;
     const { brain, velocity } = stepDrone(this.brain, { pos, player, playerSafe, dtMs, rng: this.rng, obstacles, speed }, DRONES);
     this.brain = brain;
     if (now >= this.knockedUntil) this.body.setVelocity(velocity.x, velocity.y);
-
-    // Never inside the ship's safe zone.
-    const limit = safeRadius + DRONES.bodyRadius;
-    const clamped = clampOutsideCircle({ x: this.x, y: this.y }, safeCenter, limit);
-    if (clamped.x !== this.x || clamped.y !== this.y) this.body.reset(clamped.x, clamped.y);
 
     this.bobPhase += dtMs / 260;
     this.shadow.setPosition(this.x, this.y + 15 + Math.round(Math.sin(this.bobPhase)));

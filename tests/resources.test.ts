@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { RESOURCES, SHIP, WORLD_SEED, WORLD_SIZE } from '../src/data/tuning';
+import { OBSTACLES, RESOURCES, SHIP, TANK, WORLD_SEED, WORLD_SIZE } from '../src/data/tuning';
+import { overHull } from '../src/systems/ship';
 import { nearestInRange } from '../src/systems/resources';
 import { generateWorld } from '../src/systems/worldgen';
 
@@ -25,7 +26,7 @@ describe('generateWorld resources', () => {
     for (const n of resources) {
       const opts = RESOURCES[n.kind as 'scrap' | 'crystal'];
       expect(Math.hypot(n.x - center.x, n.y - center.y)).toBeGreaterThanOrEqual(opts.minDistance);
-      expect(Math.hypot(n.x - center.x, n.y - center.y)).toBeGreaterThan(SHIP.safeRadius);
+      expect(Math.hypot(n.x - center.x, n.y - center.y)).toBeGreaterThan(SHIP.clearRadius);
       expect(n.amount).toBeGreaterThanOrEqual(opts.minAmount);
       // Nodes far from the ship hold a bonus unit.
       const far = Math.hypot(n.x - center.x, n.y - center.y) >= RESOURCES.outerBonus.distance;
@@ -47,8 +48,8 @@ describe('generateWorld resources', () => {
 
   it('spawns the tank clear of the ship and rocks', () => {
     const { spawn, center, rocks } = world;
-    expect(Math.hypot(spawn.x - center.x, spawn.y - center.y)).toBeGreaterThan(SHIP.bodyRadius + 20);
-    for (const r of rocks) expect(Math.hypot(spawn.x - r.x, spawn.y - r.y)).toBeGreaterThan(80);
+    expect(overHull({ x: spawn.x - center.x, y: spawn.y - center.y }, SHIP.layout, TANK.bodyRadius + 10)).toBe(false);
+    for (const r of rocks) expect(Math.hypot(spawn.x - r.x, spawn.y - r.y)).toBeGreaterThan(OBSTACLES.sizes[r.size].radius + TANK.bodyRadius + 30);
   });
 
   it('leaves enough salvage for the plating upgrade (8 scrap, 2 crystals)', () => {

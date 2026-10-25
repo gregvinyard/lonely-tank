@@ -37,6 +37,7 @@ interface Card {
 export class WorkshopPanel extends Phaser.GameObjects.Container {
   readonly cards: Card[] = [];
   readonly services: Button[] = [];
+  readonly exitButton: Button;
   readonly buildButton: Button;
   readonly message: Phaser.GameObjects.BitmapText;
   selected = 0;
@@ -60,7 +61,7 @@ export class WorkshopPanel extends Phaser.GameObjects.Container {
     super(scene, 0, 0);
     this.setSize(WORKSHOP_W, WORKSHOP_H);
     this.add(frame(scene, 'ui_panel', 0, 0, WORKSHOP_W, WORKSHOP_H));
-    this.add(label(scene, 10, 8, 'Workshop', UI_TEXT.accent));
+    this.add(label(scene, 10, 8, 'Cargo hold · workshop', UI_TEXT.accent));
 
     // Resources, right-aligned in the header.
     this.counts = {} as Record<ResourceKind, Phaser.GameObjects.BitmapText>;
@@ -127,8 +128,13 @@ export class WorkshopPanel extends Phaser.GameObjects.Container {
 
     this.message = label(scene, 10, WORKSHOP_H - 32, '', UI_TEXT.accent);
     this.add(this.message);
-    const help = label(scene, 10, WORKSHOP_H - 20, 'Arrows select · Space build · E/Esc close', UI_TEXT.dim);
+    const help = label(scene, 10, WORKSHOP_H - 20, 'Arrows select · Space build', UI_TEXT.dim);
     this.add(help);
+
+    // Leaving the menu drives the tank back out of the ship.
+    this.exitButton = new Button(scene, WORKSHOP_W - 112, WORKSHOP_H - 26, 104, 20, () => this.game_.workshopOpen && this.game_.exitShip());
+    this.exitButton.add(label(scene, 6, 6, 'Leave ship [E]'));
+    this.add(this.exitButton);
 
     this.setVisible(false);
     scene.add.existing(this);

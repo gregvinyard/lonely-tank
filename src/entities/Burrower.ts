@@ -11,13 +11,14 @@ import {
 } from '../systems/burrower';
 import { clampOutsideCircle, type Vec } from '../systems/drone';
 import { createRng } from '../systems/rng';
+import type { Circle } from '../systems/steer';
 
 export interface BurrowerWorld {
   player: Vec;
   playerMoving: boolean;
   playerSafe: boolean;
-  safeCenter: Vec;
-  safeRadius: number;
+  /** Circles it never tunnels into (the ship's hull, grown by its size). */
+  keepOut: readonly Circle[];
   /** Open ground it may rest or surface on. */
   isClear: (p: Vec) => boolean;
   /** Under a rock: no trail is drawn there. */
@@ -79,7 +80,8 @@ export class Burrower {
     let next = { x: before.x + (velocity.x * dtMs) / 1000, y: before.y + (velocity.y * dtMs) / 1000 };
     const edge = BURROWERS.bodyRadius;
     next = { x: Phaser.Math.Clamp(next.x, edge, WORLD_SIZE - edge), y: Phaser.Math.Clamp(next.y, edge, WORLD_SIZE - edge) };
-    this.pos = clampOutsideCircle(next, w.safeCenter, w.safeRadius + edge);
+    for (const c of w.keepOut) next = clampOutsideCircle(next, c, c.r);
+    this.pos = next;
 
     // Fading trail behind it while it tunnels, never drawn on top of rocks.
     this.travelled += Math.hypot(this.pos.x - before.x, this.pos.y - before.y);

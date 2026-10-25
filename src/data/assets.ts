@@ -98,28 +98,29 @@ export const ASSETS: AssetDef[] = [
     ),
   ),
   {
-    // Crashed ship, nose pointing up-right. Collision is a circle at the center.
+    // Crashed ship, nose up, open cargo bay at the bottom center (the door is
+    // a separate sprite). Collision is a set of circles in SHIP.layout.
     key: 'spaceship',
     file: 'assets/spaceship.png',
-    width: 128,
-    height: 128,
+    width: 320,
+    height: 256,
     placeholder: (g) => {
-      // Scorched ground and skid
-      g.fillStyle(0x000000, 0.22).fillEllipse(66, 70, 120, 96);
-      g.fillStyle(0x3a2a22, 0.5).fillEllipse(40, 96, 50, 26);
-      // Wings
-      g.fillStyle(PALETTE.metalDark).fillTriangle(22, 58, 64, 40, 70, 82).fillTriangle(70, 82, 52, 112, 92, 76);
-      g.fillStyle(PALETTE.metal).fillTriangle(28, 60, 62, 46, 66, 76).fillTriangle(72, 84, 58, 104, 88, 78);
-      // Fuselage
-      g.fillStyle(PALETTE.metalDark).fillEllipse(66, 62, 92, 40);
-      g.fillStyle(0x9aa0a6).fillEllipse(66, 60, 84, 32);
-      g.fillStyle(PALETTE.rust).fillRect(44, 54, 30, 12);
-      // Cockpit and engines
-      g.fillStyle(PALETTE.teal).fillEllipse(100, 58, 18, 12);
-      g.fillStyle(0x2c2e31).fillRect(18, 52, 10, 8).fillRect(18, 64, 10, 8);
-      g.fillStyle(PALETTE.violet).fillRect(16, 54, 3, 4).fillRect(16, 66, 3, 4);
-      // Hull breach
-      g.fillStyle(0x1a1210).fillTriangle(56, 66, 70, 62, 62, 74);
+      g.fillStyle(0x45484d).fillRoundedRect(110, 12, 100, 232, 30).fillTriangle(110, 100, 44, 160, 110, 170).fillTriangle(210, 100, 276, 160, 210, 170);
+      g.fillStyle(0x9aa0a6).fillRoundedRect(116, 18, 88, 220, 26);
+      g.fillStyle(0x100c0d).fillRect(133, 195, 55, 45);
+      g.fillStyle(PALETTE.teal).fillRect(146, 34, 28, 20);
+    },
+  },
+  {
+    // Cargo door shutter, 55x45, drawn over the bay opening; slides up to open.
+    key: 'ship_door',
+    file: 'assets/ship_door.png',
+    width: 55,
+    height: 45,
+    placeholder: (g) => {
+      g.fillStyle(0xc2940f).fillRect(0, 0, 55, 45);
+      g.fillStyle(0x2d2a2c);
+      for (let y = 4; y < 45; y += 8) g.fillRect(0, y, 55, 3);
     },
   },
   {

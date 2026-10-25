@@ -120,7 +120,9 @@ export function generateWorld(seed: number): World {
     minSpacing: DRONES.minSpacing,
     dropChance: DRONES.scrapDropChance,
   });
-  const spawn = { x: center.x, y: center.y + SHIP.spawnOffsetY };
+  // The tank starts (and is rescued to) just outside the cargo door.
+  const spawn = { x: center.x + SHIP.layout.exit.x, y: center.y + SHIP.layout.exit.y };
+  const legacySpawn = { x: center.x, y: center.y + SHIP.legacySpawnOffsetY };
 
   // Static things sit on whole pixels so they move in step with the ground as
   // the camera scrolls (fractional positions round at different moments and jiggle).
@@ -138,7 +140,7 @@ export function generateWorld(seed: number): World {
     keepOut: [
       ...snappedResources.map((n) => ({ x: n.x, y: n.y, r: 16 })),
       ...snappedDrones.map((d) => ({ x: d.x, y: d.y, r: DRONES.bodyRadius })),
-      { ...spawn, r: 40 },
+      { ...legacySpawn, r: 40 },
     ],
   });
   const sizedRocks = snappedRocks.map((r, i) => ({ ...r, size: sizes[i] }));

@@ -17,7 +17,7 @@ describe('drone placement', () => {
   it('keeps every patrol area out of the safe zone and drones off rocks', () => {
     for (const d of world.drones) {
       const dist = Math.hypot(d.x - world.center.x, d.y - world.center.y);
-      expect(dist - DRONES.patrolRadius).toBeGreaterThan(SHIP.safeRadius);
+      expect(dist - DRONES.patrolRadius).toBeGreaterThan(SHIP.clearRadius);
       for (const r of world.rocks) expect(Math.hypot(d.x - r.x, d.y - r.y)).toBeGreaterThanOrEqual(DRONES.rockClearance);
       expect(d.drop).toBeGreaterThanOrEqual(0);
       expect(d.drop).toBeLessThanOrEqual(2);

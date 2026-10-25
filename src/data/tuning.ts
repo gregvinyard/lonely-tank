@@ -60,11 +60,37 @@ export const OBSTACLES = {
   minSpacing: 80, // px between rock centers
 } as const;
 
+// The crashed ship sits at the world center, nose north, cargo door facing
+// south. Drive in through the door to be safe and use the ship's workshop.
 export const SHIP = {
-  // The crashed ship sits at the world center; the tank starts just south of it.
-  bodyRadius: 46, // collision circle, px
-  safeRadius: 200, // hostiles stay out of this circle (M3)
-  spawnOffsetY: 110,
+  // Hostile homes keep their patrol areas outside this circle. Placement only:
+  // until v0.3 it was also a visible "safe zone".
+  clearRadius: 200,
+  // Where v0.1-v0.3 started the tank. Still kept clear of rocks at generation,
+  // so the world (and everyone's saves) stays exactly the same.
+  legacySpawnOffsetY: 110,
+  // Geometry relative to the ship's center; the art is 320x256 and centered.
+  layout: {
+    hull: [
+      { x: 0, y: -62, r: 48 }, // nose
+      { x: 0, y: -10, r: 50 },
+      { x: 0, y: 62, r: 50 }, // cargo bay, door at the bottom
+      { x: -74, y: 22, r: 30 }, // wings
+      { x: -102, y: 34, r: 16 },
+      { x: 74, y: 22, r: 30 },
+      { x: 102, y: 34, r: 16 },
+      { x: -64, y: 80, r: 30 }, // engine pods
+      { x: 64, y: 80, r: 30 },
+    ],
+    door: { x: -27, y: 67, w: 55, h: 45 },
+    hold: { x: 0, y: 40 },
+    exit: { x: 0, y: 172 },
+    openDistance: 120,
+    mouthDepth: 34,
+  },
+  doorMs: 450, // door fully opening or closing
+  driveSpeed: 110, // px/sec rolling in or out under the ship's control
+  exitInvulnMs: 1200, // fresh out of the door, nothing can hurt the tank yet
 } as const;
 
 export const RESOURCES = {
@@ -103,8 +129,8 @@ export const DRONES = {
   count: 10,
   hp: 3,
   bodyRadius: 12,
-  // Homes keep the whole patrol area outside the ship's safe zone.
-  minDistance: SHIP.safeRadius + 120 + 160,
+  // Homes keep the whole patrol area well clear of the ship.
+  minDistance: SHIP.clearRadius + 120 + 160,
   rockClearance: 56,
   minSpacing: 220,
   patrolRadius: 120,
@@ -133,7 +159,7 @@ export const BURROWERS = {
   count: 5,
   hp: 2,
   bodyRadius: 14, // when surfaced
-  minDistance: SHIP.safeRadius + 300, // homes are out in the wasteland
+  minDistance: SHIP.clearRadius + 300, // homes are out in the wasteland
   rockClearance: 30, // px from a rock's edge to a home
   droneClearance: 160,
   minSpacing: 320,
@@ -168,7 +194,6 @@ export const FUEL = {
 } as const;
 
 export const WORKSHOP = {
-  dockRadius: 130, // px from the ship's center; the spawn point is inside it
   repair: { scrap: 3, hull: 25 },
   plating: { scrap: 8, crystal: 2, maxHull: 25 },
 } as const;

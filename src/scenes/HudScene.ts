@@ -31,7 +31,8 @@ const CONTROLS: [string, string][] = [
   ['WASD', 'Drive'],
   ['Mouse', 'Aim turret'],
   ['Left click', 'Fire (hold)'],
-  ['E', 'Salvage / workshop'],
+  ['E', 'Salvage / enter ship'],
+  ['E / Esc', 'Leave ship'],
   ['1 / 2', 'Refuel / repair'],
   ['Space', 'Build upgrade'],
   ['M', 'Sound on/off'],
@@ -54,7 +55,6 @@ export class HudScene extends Phaser.Scene {
   private shownGoal = '';
   prompt!: Plate;
   promptText!: Phaser.GameObjects.BitmapText;
-  private safeZone!: Plate;
   hint!: Plate;
   private compass!: Phaser.GameObjects.Graphics;
   compassLabel!: Plate;
@@ -87,7 +87,6 @@ export class HudScene extends Phaser.Scene {
 
     this.prompt = new Plate(this, '', { minHeight: 17 }).setVisible(false);
     this.promptText = this.prompt.text;
-    this.safeZone = new Plate(this, 'Home base · safe zone', { tint: COLOR.accent });
     this.hint = new Plate(this, 'WASD drive · mouse aim · click fire · E use · Esc pause');
     this.time.delayedCall(HINT_MS, () => this.tweens.add({ targets: this.hint, alpha: 0, duration: 800 }));
     this.warning = new Plate(this, '', { tint: COLOR.danger, icon: 'icon_warn' }).setVisible(false);
@@ -140,8 +139,8 @@ export class HudScene extends Phaser.Scene {
     const node = g.nearby;
     const prompt = node
       ? `[E] Salvage ${LABELS[node.kind]} ×${node.amount}`
-      : g.docked && !g.workshopOpen
-        ? '[E] Open workshop'
+      : g.nearDoor
+        ? '[E] Enter ship · or drive in'
         : '';
     this.prompt.setVisible(!!prompt);
     if (prompt) {
@@ -149,8 +148,6 @@ export class HudScene extends Phaser.Scene {
       centerBottom(this.prompt, width, height - 32);
     }
 
-    this.safeZone.setVisible(g.inSafeZone && !g.workshopOpen);
-    centerOn(this.safeZone, width / 2, 12);
     this.updateWarning(width);
     this.toast.setPosition(width - 4 - this.toast.width, 4);
     this.hint.setPosition(4, height - 4 - this.hint.height);
@@ -249,7 +246,7 @@ export class HudScene extends Phaser.Scene {
   private updateWarning(width: number) {
     const g = this.game_;
     let s = '';
-    if (!g.inSafeZone) {
+    if (!g.inShip) {
       if (g.fuel / g.maxFuel <= FUEL.lowFraction) s = 'Low fuel · return to ship';
       else if (g.hull / g.maxHull <= 0.3) s = 'Hull critical · repair at ship';
     }
@@ -323,7 +320,8 @@ export class HudScene extends Phaser.Scene {
     const target = { x: c.x - cam.worldView.x, y: c.y - cam.worldView.y };
     // Keep the compass above the prompt and hint plates along the bottom.
     const floor = this.prompt.visible ? this.prompt.y : this.hint.alpha > 0 ? this.hint.y : height;
-    const place = compassPlacement(target, { width, height: floor - 4 }, 48, 18);
+    // Hidden while any part of the (big) ship is on screen.
+    const place = compassPlacement(target, { width, height: floor - 4 }, 110, 18);
 
     this.compass.clear();
     this.compassLabel.setVisible(!!place);

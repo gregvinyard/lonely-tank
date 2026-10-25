@@ -3,7 +3,7 @@
 // The audio context is only created after the first click or key press, as
 // browsers require. Every call is safe when audio is unavailable or muted.
 
-export type SfxName = 'fire' | 'impact' | 'hit' | 'explode' | 'hurt' | 'pickup' | 'open' | 'ok' | 'deny' | 'craft' | 'rescue' | 'lowFuel' | 'rumble' | 'burst';
+export type SfxName = 'fire' | 'impact' | 'hit' | 'explode' | 'hurt' | 'pickup' | 'open' | 'ok' | 'deny' | 'craft' | 'rescue' | 'lowFuel' | 'rumble' | 'burst' | 'door';
 
 const MUTE_KEY = 'lonely-tank.muted';
 const MAX_VOICES = 8;
@@ -67,6 +67,11 @@ const SOUNDS: Record<SfxName, (Tone | Noise)[]> = {
   burst: [
     { ms: 220, gain: 0.22, cutoff: 1400 },
     { type: 'sawtooth', from: 90, to: 220, ms: 140, gain: 0.08 },
+  ],
+  // The cargo door sliding.
+  door: [
+    { ms: 380, gain: 0.08, cutoff: 500 },
+    { type: 'square', from: 70, to: 90, ms: 360, gain: 0.03 },
   ],
   lowFuel: [
     { type: 'square', from: 880, to: 880, ms: 80, gain: 0.05 },

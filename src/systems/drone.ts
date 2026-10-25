@@ -92,7 +92,7 @@ export interface DroneTuning {
 export interface DroneContext {
   pos: Vec;
   player: Vec;
-  /** The player is inside the ship's safe zone: never chase. */
+  /** The player is inside the ship (or rolling through its door): never chase. */
   playerSafe: boolean;
   dtMs: number;
   rng: () => number;
@@ -109,7 +109,7 @@ export function stepDrone(b: DroneBrain, c: DroneContext, t: DroneTuning): { bra
   const brain = { ...b, alertMs: Math.max(0, (b.alertMs ?? 0) - c.dtMs) };
   const alerted = brain.alertMs > 0;
 
-  // The ship's safe zone always calms drones down, alerted or not.
+  // A tank inside the ship always calms drones down, alerted or not.
   if (brain.mode === 'chase') {
     const lost = alerted ? distHome > t.alertLeash : distPlayer > t.loseRadius || distHome > t.leashRadius;
     if (c.playerSafe || lost) Object.assign(brain, { mode: 'return', alertMs: 0 });

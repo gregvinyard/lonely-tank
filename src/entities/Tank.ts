@@ -10,6 +10,8 @@ export class Tank {
   private readonly body: Phaser.Physics.Arcade.Body;
   /** Pixels the turret is kicked back along its barrel after a shot. */
   private kick = 0;
+  /** Called before every teleport, so the scene can cancel anything scripted. */
+  onReset?: () => void;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     this.hull = scene.physics.add.image(x, y, 'tank_hull').setDepth(10);
@@ -59,6 +61,7 @@ export class Tank {
 
   /** Teleports the tank to a point, stopped and facing right. */
   reset(x: number, y: number) {
+    this.onReset?.();
     this.body.reset(x, y);
     this.hull.setRotation(0);
     this.syncTurret();

@@ -31,7 +31,7 @@ describe('burrower placement', () => {
     // Same counts and first entries as v0.2 (sizes and positions come from earlier seeds).
     expect(world.rocks).toHaveLength(OBSTACLES.rockCount);
     expect(world.drones).toHaveLength(DRONES.count);
-    expect(Math.hypot(world.spawn.x - world.center.x, world.spawn.y - world.center.y)).toBeLessThan(SHIP.safeRadius);
+    expect(world.spawn).toEqual({ x: world.center.x + SHIP.layout.exit.x, y: world.center.y + SHIP.layout.exit.y });
   });
 });
 

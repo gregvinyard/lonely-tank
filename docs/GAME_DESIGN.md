@@ -37,9 +37,7 @@ All numbers live in `TANK` in `src/data/tuning.ts`.
 
 ## Spaceship (M2)
 
-- Crashed ship fixed at the world center; circular collision body (r = 46) so the tank can't drive through it.
-- Safe zone: 200 px circle, shown as a faint teal ring and a "HOME BASE · SAFE ZONE" HUD tag while inside. Hostiles (M3) will be kept out of it.
-- The tank spawns 110 px south of the ship.
+- *v0.4 replaced the ship; see "The ship (v0.4)" below. Until then:* a 128 px ship with one collision circle (r = 46), a 200 px "safe zone" ring around it, and the spawn 110 px south of it.
 - No workshop yet (M4).
 
 ## Resources (M2)
@@ -65,10 +63,10 @@ All numbers live in `HULL`, `CANNON`, `DRONES` and `RESCUE` in `src/data/tuning.
 - **Cannon:** hold left mouse to fire along the turret's facing (it lags the cursor slightly). 420 ms cooldown, shells fly 420 px/s for 0.9 s (~380 px). Shells stop at rocks, the ship and drones. Muzzle flash and spark impacts.
 - **Drones:** 10, placed deterministically with stable ids (`drone-00`…). Each patrols within 120 px of its home, idling between waypoints at 36 px/s.
   - Chases the tank within 200 px at 95 px/s (the tank does 160, so you can always outrun one).
-  - Gives up beyond 300 px from the tank, 420 px from home, or when the tank enters the safe zone, then returns home.
-  - **Shot drones** hunt the tank for 8 s from any range (leash 900 px), and drones within 260 px of them join in. Each hit refreshes it. The safe zone still calms them (v0.3).
+  - Gives up beyond 300 px from the tank, 420 px from home, or when the tank goes into the ship, then returns home.
+  - **Shot drones** hunt the tank for 8 s from any range (leash 900 px), and drones within 260 px of them join in. Each hit refreshes it. Going into the ship still calms them.
   - **Steering** (v0.3): drones bend around rocks and the ship, treating touching rocks as one wall, and stick to one side until they're past. A drone that barely moves for 0.7 s while trying sidesteps 70 px for 0.9 s; a patrolling one picks a new waypoint. Patrol waypoints are never inside rocks. Pure logic in `src/systems/steer.ts`, simulated on the real map in `tests/steer.test.ts`.
-  - Never enters the ship's safe zone: homes are placed so the patrol area is outside it, and positions are clamped as a backstop.
+  - Homes are placed so the patrol area stays 200 px or more from the ship's center. Since v0.4 there's no invisible line: a chasing drone can follow the tank right up to the hull (which it collides with and steers around).
   - 3 hits to destroy. White flash and knockback on hit; sparks, dust and a small camera shake on death.
   - 60% leave 1–2 scrap (decided at world generation; the drop has id `<drone id>-drop`).
   - Hovering is shown by a bobbing ground shadow; the sprite never scales or rotates, to stay on the pixel grid.
@@ -80,7 +78,7 @@ All numbers live in `HULL`, `CANNON`, `DRONES` and `RESCUE` in `src/data/tuning.
 Numbers live in `FUEL`, `WORKSHOP` and `SAVE` in `src/data/tuning.ts`.
 
 - **Fuel:** 100. Burns 1 unit per second at full speed, scaled by speed, nothing while stopped. That's about 100 s of full-throttle driving; the map edge is ~6 s from the ship. The HUD bar turns red and blinks below 20%. At 0 the tank is rescued.
-- **Workshop:** within 130 px of the ship's center (the spawn point is inside), press E. The tank stops while it's open; keys 1/2/3 or clicking a row run an action, E or Esc closes it. Unavailable actions are dimmed and pressing them says why.
+- **Workshop:** *(v0.4: it's the menu inside the ship; see below.)* Originally: within 130 px of the ship's center, press E. The tank stops while it's open; keys 1/2/3 or clicking a row run an action, E or Esc closes it. Unavailable actions are dimmed and pressing them says why.
   - Refuel: free.
   - Repair: 3 scrap for +25 hull, capped at max.
   - Craft reinforced plating: 8 scrap + 2 crystal, +25 max hull (also adds 25 to current hull). Once only. Shows a success banner; exploration continues.
@@ -99,7 +97,7 @@ Numbers live in `FUEL`, `WORKSHOP` and `SAVE` in `src/data/tuning.ts`.
 - **Feedback:** turret recoil (3 px, whole pixels), a red flash on the tank when hit, dark smoke while hull is at or below 30%.
 - **Sound:** synthesized effects (see `ART_REQUESTS.md`); M mutes and is remembered.
 - **Pause:** Esc or P pauses the game (drones, fuel, autosave timer all stop) and shows the full controls list. With the workshop open, Esc only closes it.
-- **Warnings:** outside the safe zone, "Low fuel · return to ship" or "Hull critical · repair at ship" appears at the top of the screen.
+- **Warnings:** outside the ship, "Low fuel · return to ship" or "Hull critical · repair at ship" appears at the top of the screen.
 - **Hint bar:** shortened; fades after 45 s (the pause screen keeps the full list).
 - **Fixes:** static collision circles (rocks, ship) were 10–18 px up-left of their art (Phaser's `StaticBody.setCircle` ignores its offset; `setOffset` applies it). Keys pressed in the same frame could be handled twice (Phaser re-dispatches its per-frame key queue on every DOM key event); handlers are wrapped with `keyOnce`. Right-click menu disabled over the game; crosshair cursor.
 
@@ -140,7 +138,7 @@ All numbers live in `BURROWERS` in `src/data/tuning.ts`; logic in `src/systems/b
 
 - **Placement:** 5 (`burrower-00`…), 500 px or more from the ship, clear of rocks, drone homes and salvage. They're placed last from seed + 5, so the v0.2 world layout and existing saves are unchanged.
 - **Underground:** shown only as a sand mound. While tunnelling it leaves small mounds every 9 px that fade over 3.2 s (pooled, whole-pixel positions, not drawn over rocks). It passes under rocks and has no physics body. Shells fly over it and it can't hurt the tank.
-- **Senses:** feels a moving tank within 260 px, a stopped one within 130 px. It ignores a tank in the safe zone, and gives up beyond 340 px from the tank or 520 px from home.
+- **Senses:** feels a moving tank within 260 px, a stopped one within 130 px. It ignores a tank in the ship, and gives up beyond 340 px from the tank or 520 px from home.
 - **Attack:**
   1. It tunnels toward the tank at 80 px/s (the tank does 160, so keep moving and you get away).
   2. Within 22 px, on open ground (never under a rock or by the ship), the mound shakes and sprays sand for 0.7 s, with a low rumble.
@@ -149,4 +147,35 @@ All numbers live in `BURROWERS` in `src/data/tuning.ts`; logic in `src/systems/b
   5. It dives and rests for 1.4 s before it can stalk again.
 - **Hits and damage:** 2 HP. Hits and contact are checked by distance in `GameScene.updateBurrowers`. All tank damage goes through `damageTank`, so invulnerability, the field-repair calm timer and rescue apply.
 - **Loot:** 1 crystal, 40% chance of 2 (`<id>@<kill time>-crystal`). It returns home after the same 5 minutes as drones and is saved in the same `destroyed` list. A rescue sends burrowers home underground.
+
+## The ship (v0.4)
+
+Geometry and timings in `SHIP` (`src/data/tuning.ts`). Pure door and footprint logic in `src/systems/ship.ts`, unit tested in `tests/ship.test.ts`.
+
+- **Size and solidity:** a 320×256 wreck at the world center, nose north, about 2.5× the old one. Its hull is nine invisible collision circles (nose, fuselage, cargo bay, wings, engine pods). Tanks, drones and shells all hit it, and drones steer around it.
+- **Cargo door:** at the bottom center, facing the spawn. It slides up into the hull when the tank's center comes within 120 px of the doorway, and shuts again when the tank leaves. The shutter is a separate sprite cropped in whole-pixel steps, and the opening behind it is a dark hold painted into the ship's art.
+- **Going in:**
+  - Drive into the open doorway. The hull stops the tank just below it, and that counts; it may be up to 12 px off either side of the door.
+  - Or press E near the door.
+  - The ship takes over: physics off, it rolls the tank in at 110 px/s, turning smoothly. The ship draws above the tank, so it vanishes into the hold.
+  - Once inside, the ship menu (the workshop) opens and the game saves.
+- **Safety:** you're safe only inside. While entering, inside or leaving:
+  - the tank can't be damaged, burns no fuel and can't fire
+  - drones and burrowers lose interest
+  - there's no visible "safe zone" any more
+- **Leaving:**
+  - E, Esc, or the **Leave ship** button closes the menu. The tank rolls out to the spawn point, 60 px below the door, facing south.
+  - You then get control back with 1.2 s of invulnerability (the tank blinks), and fire is held until the mouse is released.
+  - The door shuts once you drive away.
+- **Rescue:** puts the tank at the spawn point outside the door, door open.
+- **Saves:**
+  - A save made while the tank is in the ship stores the spot outside the door.
+  - The game also saves once at start-up.
+  - Older saves that parked the tank where the bigger ship now stands are moved to the spawn point on load.
+- **World unchanged:** rocks, salvage, drones and burrowers are exactly where they were. The old spawn point is still used as a keep-out when rock sizes are assigned, and `tests/worldlock.test.ts` compares the whole world to a v0.3 fixture.
+- **Hostile reach:**
+  - No drone patrols within detection range of the door; the closest has 235 px to spare.
+  - Burrower-01's roaming range plus its tread sense overlaps the door area by about 64 px, so it can come for a tank sitting by the door.
+  - Burrowers never surface within 70 px of the doorway or under the ship.
+- **Wreck dressing:** scorch marks under the ship and a wisp of smoke from the right engine.
 

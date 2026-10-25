@@ -7,7 +7,6 @@ import {
   FUEL,
   HULL,
   OBSTACLES,
-  PALETTE,
   RESCUE,
   RESOURCES,
   RESPAWN,
@@ -35,6 +34,7 @@ import { SAVE_VERSION, browserStorage, clampTank, clearSave, hasSave, loadSave, 
 import { UPGRADE_EFFECTS, computeStats, type TankStats } from '../systems/stats';
 import { build, service, type ActionResult, type ServiceAction, type TankStatus } from '../systems/workshop';
 import { dueForRespawn } from '../systems/respawn';
+import { atDoorway, doorMouth, doorTarget, hullAt, overHull, sheltered, stepDoor, type ShipState } from '../systems/ship';
 import type { Circle } from '../systems/steer';
 import { generateWorld, type World } from '../systems/worldgen';
 
@@ -93,9 +93,12 @@ export class GameScene extends Phaser.Scene {
   nearestSalvage: ResourceNode | undefined;
   /** The node the tank is close enough to salvage, if any. */
   nearby: ResourceNode | undefined;
-  inSafeZone = true;
-  /** Close enough to the ship to open the workshop. */
-  docked = false;
+  /** Where the tank is relative to the ship: outside, rolling in or out, or parked inside. */
+  shipState: ShipState = 'outside';
+  readonly shipLayout = SHIP.layout;
+  /** Cargo door openness, 0 (shut) to 1 (open). */
+  doorOpen = 0;
+  /** The ship menu (workshop) is showing; only while parked inside. */
   workshopOpen = false;
 
   private keys!: Keys;
@@ -107,6 +110,9 @@ export class GameScene extends Phaser.Scene {
   private fuelWarned = false;
   private shells!: Phaser.Physics.Arcade.Group;
   private droneGroup!: Phaser.Physics.Arcade.Group;
+  /** The cargo door shutter; it slides up into the hull to open. */
+  private door!: Phaser.GameObjects.Image;
+  private shipSmokeMs = 0;
   /** Rocks and the ship, grown by a drone's radius, for steering. */
   private droneObstacles: Circle[] = [];
   /** Rock collision circles, for burrowers (which pass under them). */
@@ -151,7 +157,8 @@ export class GameScene extends Phaser.Scene {
     this.lastFired = -Infinity;
     this.invulnUntil = 0;
     this.lastHitAt = -Infinity;
-    this.docked = false;
+    this.shipState = 'outside';
+    this.doorOpen = 0;
     this.workshopOpen = false;
     this.holdFire = false;
     this.fuelWarned = false;
@@ -160,13 +167,6 @@ export class GameScene extends Phaser.Scene {
 
     this.physics.world.setBounds(0, 0, WORLD_SIZE, WORLD_SIZE);
     this.add.tileSprite(0, 0, WORLD_SIZE, WORLD_SIZE, 'terrain').setOrigin(0, 0);
-
-    // Faint ring marking the ship's safe zone.
-    this.add
-      .circle(center.x, center.y, SHIP.safeRadius)
-      .setStrokeStyle(2, PALETTE.teal, 0.25)
-      .setFillStyle(PALETTE.teal, 0.04)
-      .setDepth(1);
 
     const solids = this.physics.add.staticGroup();
     for (const r of this.world.rocks) {
@@ -178,10 +178,19 @@ export class GameScene extends Phaser.Scene {
       setCircleBody(rock, OBSTACLES.sizes[r.size].radius);
     }
     // Scorched crash site under the ship.
-    this.add.ellipse(center.x - 8, center.y + 4, 150, 80, 0x2a1a14, 0.35).setDepth(1);
-    const ship = solids.create(center.x, center.y, 'spaceship') as Phaser.Physics.Arcade.Image;
-    ship.setDepth(6);
-    setCircleBody(ship, SHIP.bodyRadius);
+    this.add.ellipse(center.x - 6, center.y + 6, 380, 270, 0x2a1a14, 0.3).setDepth(1);
+    this.add.ellipse(center.x + 20, center.y - 10, 250, 180, 0x2a1a14, 0.25).setDepth(1);
+    // The ship draws over the tank, so a tank rolling through the door
+    // disappears into the dark hold. Its hull is a set of invisible circles.
+    this.add.image(center.x, center.y, 'spaceship').setDepth(11.5);
+    for (const c of hullAt(center, SHIP.layout)) {
+      const part = solids.create(c.x, c.y, '__DEFAULT') as Phaser.Physics.Arcade.Image;
+      part.setVisible(false);
+      setCircleBody(part, c.r);
+    }
+    const door = SHIP.layout.door;
+    this.door = this.add.image(center.x + door.x, center.y + door.y, 'ship_door').setOrigin(0, 0).setDepth(11.6);
+    this.shipSmokeMs = 0;
 
     for (const node of this.world.resources) if (!this.collected.has(node.id)) this.addResourceNode(node);
     for (const d of save?.drops ?? []) {
@@ -216,11 +225,15 @@ export class GameScene extends Phaser.Scene {
     let start = { x: this.world.spawn.x, y: this.world.spawn.y };
     if (save) {
       const t = clampTank(save.tank, this.maxHull, this.maxFuel, WORLD_SIZE, TANK.bodyRadius);
-      start = { x: t.x, y: t.y };
+      // Older saves often parked the tank where the (now much bigger) ship is.
+      const onShip = overHull({ x: t.x - center.x, y: t.y - center.y }, SHIP.layout, TANK.bodyRadius + 2);
+      if (!onShip) start = { x: t.x, y: t.y };
       this.hull = t.hull;
       this.fuel = t.fuel;
     }
     this.tank = new Tank(this, start.x, start.y);
+    // Teleporting the tank (rescue, tests) cancels any trip through the door.
+    this.tank.onReset = () => this.leaveShipNow();
     this.physics.add.collider(this.tank.hull, solids);
 
     this.rockCircles = this.world.rocks.map((r) => ({ x: r.x, y: r.y, r: OBSTACLES.sizes[r.size].radius }));
@@ -228,7 +241,7 @@ export class GameScene extends Phaser.Scene {
     const grow = DRONES.bodyRadius + DRONES.obstacleMargin;
     this.droneObstacles = [
       ...this.world.rocks.map((r) => ({ x: r.x, y: r.y, r: OBSTACLES.sizes[r.size].radius + grow })),
-      { x: center.x, y: center.y, r: SHIP.bodyRadius + grow },
+      ...hullAt(center, SHIP.layout, grow),
     ];
     const droneGroup = (this.droneGroup = this.physics.add.group());
     for (const p of this.world.drones) if (!this.destroyed.has(p.id)) this.drones.set(p.id, new Drone(this, p, droneGroup));
@@ -274,6 +287,8 @@ export class GameScene extends Phaser.Scene {
 
     this.input.mouse?.disableContextMenu();
     this.scene.launch('Hud');
+    // A fresh (or repaired) save from the start, so a reload never loses the session.
+    this.save();
 
     if (new URLSearchParams(location.search).has('debug')) {
       this.physics.world.createDebugGraphic();
@@ -298,9 +313,12 @@ export class GameScene extends Phaser.Scene {
 
     this.playTimeMs += Math.min(delta, MAX_FRAME_MS);
     const st = this.stats;
-    this.tank.update(input, aim, delta, st);
+    const outside = this.shipState === 'outside';
+    // In the ship, or rolling through its door, the ship drives the tank.
+    if (outside) this.tank.update(input, aim, delta, st);
+    else this.tank.turret.setRotation(this.tank.hull.rotation);
     if (!pointer.leftButtonDown()) this.holdFire = false;
-    const firing = pointer.leftButtonDown() && !this.workshopOpen && !this.holdFire;
+    const firing = pointer.leftButtonDown() && outside && !this.holdFire;
     if (firing && canFire(time, this.lastFired, st.cooldownMs)) this.fire(time);
 
     // Camera lerp is applied once per frame; scale it so the follow feels the
@@ -317,15 +335,9 @@ export class GameScene extends Phaser.Scene {
     this.emitSmoke(delta);
     this.fieldRepair(time, delta);
 
-    const c = this.world.center;
-    const fromShip = Math.hypot(this.tank.x - c.x, this.tank.y - c.y);
-    this.inSafeZone = fromShip < SHIP.safeRadius;
-    const docked = fromShip < WORKSHOP.dockRadius;
-    if (docked && !this.docked) this.save();
-    this.docked = docked;
-    if (!docked) this.workshopOpen = false;
+    this.updateShip(delta);
 
-    for (const d of this.drones.values()) d.update(time, delta, this.tank, this.inSafeZone, c, SHIP.safeRadius, this.droneObstacles);
+    for (const d of this.drones.values()) d.update(time, delta, this.tank, this.inShip, this.droneObstacles);
 
     this.updateBurrowers(delta);
 
@@ -343,15 +355,120 @@ export class GameScene extends Phaser.Scene {
     this.nearestSalvage = st.scanner > 0 ? nearestInRange(this.tank, nodes, Infinity) : undefined;
   }
 
-  private updateBurrowers(delta: number) {
+  /** True while the tank is in the ship or rolling through its door: nothing can touch it. */
+  get inShip() {
+    return sheltered(this.shipState);
+  }
+
+  /** The tank is near the cargo door and could drive in. */
+  get nearDoor() {
+    const m = doorMouth(SHIP.layout);
     const c = this.world.center;
+    return this.shipState === 'outside' && Math.hypot(this.tank.x - c.x - m.x, this.tank.y - c.y - m.y) < SHIP.layout.openDistance;
+  }
+
+  /** Opens and closes the cargo door, and takes the tank in when it drives into the doorway. */
+  private updateShip(delta: number) {
+    const c = this.world.center;
+    const rel = { x: this.tank.x - c.x, y: this.tank.y - c.y };
+    const before = this.doorOpen;
+    const target = doorTarget(this.shipState, rel, SHIP.layout);
+    this.doorOpen = stepDoor(this.doorOpen, target, delta, SHIP.doorMs);
+    if (before === (target ? 0 : 1) && this.doorOpen !== before) sfx.play('door');
+
+    // The shutter slides up into the hull: show only its lower part, at the top of the opening.
+    const d = SHIP.layout.door;
+    const hidden = Math.round(this.doorOpen * d.h);
+    this.door.setVisible(hidden < d.h);
+    this.door.setCrop(0, hidden, d.w, d.h - hidden).setY(c.y + d.y - hidden);
+
+    if (this.shipState === 'outside' && atDoorway(rel, this.doorOpen, SHIP.layout)) this.enterShip();
+
+    // A wisp of smoke from the wreck's broken engine.
+    this.shipSmokeMs += delta;
+    if (this.shipSmokeMs > 260) {
+      this.shipSmokeMs = 0;
+      this.smoke.emitParticleAt(c.x + 64 + Phaser.Math.Between(-3, 3), c.y + 112, 1);
+    }
+  }
+
+  /** Rolls the tank in through the cargo door; the ship menu opens once it's inside. */
+  enterShip() {
+    if (this.shipState !== 'outside') return;
+    const c = this.world.center;
+    const m = doorMouth(SHIP.layout);
+    const L = SHIP.layout;
+    this.shipState = 'entering';
+    this.tankBody.setVelocity(0, 0);
+    this.tankBody.enable = false;
+    this.save();
+    this.driveTank([{ x: c.x + m.x, y: c.y + m.y }, { x: c.x + L.hold.x, y: c.y + L.hold.y }], () => {
+      this.shipState = 'inside';
+      this.workshopOpen = true;
+      sfx.play('open');
+      this.save();
+    });
+  }
+
+  /** Closes the ship menu and rolls the tank back out of the door, facing away from the ship. */
+  exitShip() {
+    if (this.shipState !== 'inside') return;
+    const c = this.world.center;
+    const L = SHIP.layout;
+    this.workshopOpen = false;
+    this.holdFire = true;
+    this.shipState = 'exiting';
+    this.tank.hull.setPosition(c.x + L.hold.x, c.y + L.hold.y);
+    this.driveTank([{ x: c.x + L.exit.x, y: c.y + L.exit.y }], () => {
+      const at = { x: this.tank.x, y: this.tank.y };
+      const facing = this.tank.hull.rotation;
+      this.leaveShipNow();
+      this.tankBody.reset(at.x, at.y);
+      this.tank.hull.setRotation(facing);
+      this.tank.turret.setRotation(facing);
+      this.invulnUntil = this.time.now + SHIP.exitInvulnMs;
+    });
+  }
+
+  /** Back to driving around, right where the tank is: ends any trip through the door. */
+  private leaveShipNow() {
+    this.tweens.killTweensOf(this.tank.hull);
+    this.shipState = 'outside';
+    this.workshopOpen = false;
+    this.tankBody.enable = true;
+  }
+
+  /** Drives the tank (physics off) through each point in turn at the ship's driving speed, facing the way it goes. */
+  private driveTank(points: { x: number; y: number }[], done: () => void): void {
+    const [p, ...rest] = points;
+    if (!p) return done();
+    const hull = this.tank.hull;
+    const dist = Math.hypot(p.x - hull.x, p.y - hull.y);
+    if (dist < 1) return this.driveTank(rest, done);
+    // Swing round to face the way it's going (the short way), then roll there.
+    const facing = Math.atan2(p.y - hull.y, p.x - hull.x);
+    const turn = Phaser.Math.Angle.Wrap(facing - hull.rotation);
+    this.tweens.add({ targets: hull, rotation: hull.rotation + turn, duration: Math.abs(turn) * 160 });
+    this.tweens.add({
+      targets: hull,
+      x: p.x,
+      y: p.y,
+      duration: (dist / SHIP.driveSpeed) * 1000,
+      onComplete: () => this.driveTank(rest, done),
+    });
+  }
+
+  private get tankBody() {
+    return this.tank.hull.body as Phaser.Physics.Arcade.Body;
+  }
+
+  private updateBurrowers(delta: number) {
     const t = this.tank;
     const world = {
       player: { x: t.x, y: t.y },
       playerMoving: t.speed > 10,
-      playerSafe: this.inSafeZone,
-      safeCenter: c,
-      safeRadius: SHIP.safeRadius,
+      playerSafe: this.inShip,
+      keepOut: this.burrowerKeepOut,
       isClear: (p: { x: number; y: number }) => this.openGround(p),
       underRock: (p: { x: number; y: number }) => this.rockCircles.some((r) => Math.hypot(p.x - r.x, p.y - r.y) < r.r + 2),
     };
@@ -374,11 +491,20 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  /** Ground a burrower may rest or surface on: not under a rock, not by the ship. */
+  /** The ship's hull, grown by a burrower's size: burrowers never tunnel under it. */
+  private get burrowerKeepOut(): Circle[] {
+    return (this.burrowerKeepOutCache ??= hullAt(this.world.center, SHIP.layout, BURROWERS.bodyRadius + 8));
+  }
+
+  private burrowerKeepOutCache?: Circle[];
+
+  /** Ground a burrower may rest or surface on: not under a rock or the ship, not right at the door. */
   private openGround(p: { x: number; y: number }) {
-    const c = this.world.center;
     const r = BURROWERS.bodyRadius;
-    if (Math.hypot(p.x - c.x, p.y - c.y) < SHIP.safeRadius + r + 8) return false;
+    if (this.burrowerKeepOut.some((o) => Math.hypot(p.x - o.x, p.y - o.y) < o.r)) return false;
+    const c = this.world.center;
+    const m = doorMouth(SHIP.layout);
+    if (Math.hypot(p.x - c.x - m.x, p.y - c.y - m.y) < 70) return false;
     return this.rockCircles.every((o) => Math.hypot(p.x - o.x, p.y - o.y) >= o.r + r + 4);
   }
 
@@ -459,7 +585,7 @@ export class GameScene extends Phaser.Scene {
       version: SAVE_VERSION,
       seed: this.world.seed,
       playTimeMs: Math.round(this.playTimeMs),
-      tank: { x: this.tank.x, y: this.tank.y, hull: this.hull, fuel: this.fuel },
+      tank: { ...(this.inShip ? this.world.spawn : { x: this.tank.x, y: this.tank.y }), hull: this.hull, fuel: this.fuel },
       inventory: this.inventory,
       collected: events(this.collected),
       destroyed: events(this.destroyed),
@@ -537,20 +663,16 @@ export class GameScene extends Phaser.Scene {
   }
 
   private interact() {
-    if (this.workshopOpen) return this.closeWorkshop();
+    if (this.workshopOpen) return this.exitShip();
+    if (this.shipState !== 'outside') return;
     const node = this.nearby;
     if (node) return this.collect(node);
-    if (this.docked) {
-      this.workshopOpen = true;
-      sfx.play('open');
-      this.save();
-    }
+    if (this.nearDoor) this.enterShip();
   }
 
+  /** Leaving the ship menu means leaving the ship. */
   closeWorkshop() {
-    if (!this.workshopOpen) return;
-    this.workshopOpen = false;
-    this.holdFire = true;
+    this.exitShip();
   }
 
   private collect(node: ResourceNode) {
@@ -651,7 +773,7 @@ export class GameScene extends Phaser.Scene {
   /** Damages the tank unless it was just hit; rescues it at 0 hull. */
   private damageTank(amount: number, from: { x: number; y: number }) {
     const now = this.time.now;
-    if (now < this.invulnUntil) return;
+    if (now < this.invulnUntil || this.inShip) return;
 
     this.invulnUntil = now + HULL.hitInvulnMs;
     this.lastHitAt = now;

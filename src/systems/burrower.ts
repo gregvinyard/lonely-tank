@@ -77,7 +77,7 @@ export interface BurrowerContext {
   playerSafe: boolean;
   dtMs: number;
   rng: () => number;
-  /** Open ground it could surface on or rest under (not under a rock, not in the safe zone). */
+  /** Open ground it could surface on or rest under (not under a rock or the ship). */
   isClear: (p: Vec) => boolean;
 }
 
