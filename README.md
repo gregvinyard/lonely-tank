@@ -31,9 +31,11 @@ npm run dev        # dev server at http://localhost:5173
 | W/A/S/D | Drive |
 | Mouse | Aim turret |
 | Left mouse | Fire cannon (hold to keep firing) |
-| E | Salvage a nearby resource |
+| E | Salvage a nearby resource, or open/close the workshop at the ship |
+| 1 / 2 / 3 | Workshop: refuel / repair / craft plating (or click the row) |
+| Esc | Close the workshop |
 
-More controls arrive with later milestones (see the spec). Add `?debug` to the URL to see physics bodies.
+Progress saves to the browser automatically. Add `?newgame` to the URL to wipe the save and start over, or `?debug` to see physics bodies.
 
 ## Project layout
 

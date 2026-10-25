@@ -3,12 +3,16 @@ import {
   CAMERA,
   CANNON,
   DRONES,
+  FUEL,
   HULL,
   OBSTACLES,
   PALETTE,
   RESCUE,
   RESOURCES,
+  SAVE,
   SHIP,
+  TANK,
+  WORKSHOP,
   WORLD_SEED,
   WORLD_SIZE,
   frameLerp,
@@ -16,11 +20,16 @@ import {
 import { Drone } from '../entities/Drone';
 import { Tank } from '../entities/Tank';
 import { applyDamage, canFire, rescuePenalty } from '../systems/combat';
+import { burnFuel } from '../systems/fuel';
 import { addResource, createInventory, type Inventory } from '../systems/inventory';
 import { nearestInRange, type ResourceKind, type ResourceNode } from '../systems/resources';
+import { SAVE_VERSION, browserStorage, clampTank, clearSave, loadSave, writeSave, type SaveData } from '../systems/save';
+import { applyAction, maxHullFor, type TankStatus, type WorkshopAction, type WorkshopTuning } from '../systems/workshop';
 import { generateWorld, type World } from '../systems/worldgen';
 
-type Keys = Record<'up' | 'down' | 'left' | 'right' | 'interact', Phaser.Input.Keyboard.Key>;
+type Keys = Record<'up' | 'down' | 'left' | 'right' | 'interact' | 'close' | 'one' | 'two' | 'three', Phaser.Input.Keyboard.Key>;
+
+export const WORKSHOP_TUNING: WorkshopTuning = { baseHull: HULL.max, repair: WORKSHOP.repair, plating: WORKSHOP.plating };
 
 /** Emitted on game.events when the player salvages a node. */
 export const COLLECTED_EVENT = 'resource-collected';
@@ -38,19 +47,35 @@ export interface RescuedPayload {
   lost: Inventory;
 }
 
+/** Emitted on game.events after every workshop action, successful or not. */
+export const WORKSHOP_EVENT = 'workshop-action';
+export interface WorkshopPayload {
+  action: WorkshopAction;
+  ok: boolean;
+  message: string;
+}
+
 export class GameScene extends Phaser.Scene {
   world!: World;
   tank!: Tank;
   inventory: Inventory = createInventory();
   hull: number = HULL.max;
-  maxHull: number = HULL.max;
+  fuel: number = FUEL.max;
+  readonly maxFuel = FUEL.max;
+  plating = false;
   /** Uncollected resource nodes by stable id. */
   readonly resources = new Map<string, { node: ResourceNode; sprite: Phaser.GameObjects.Image; glow?: Phaser.GameObjects.Image }>();
   /** Live drones by stable id. */
   readonly drones = new Map<string, Drone>();
+  /** Ids of everything collected or destroyed, for the save. */
+  readonly collected = new Set<string>();
+  readonly destroyed = new Set<string>();
   /** The node the tank is close enough to salvage, if any. */
   nearby: ResourceNode | undefined;
   inSafeZone = true;
+  /** Close enough to the ship to open the workshop. */
+  docked = false;
+  workshopOpen = false;
 
   private keys!: Keys;
   private dust!: Phaser.GameObjects.Particles.ParticleEmitter;
@@ -59,19 +84,35 @@ export class GameScene extends Phaser.Scene {
   private dustDistance = 0;
   private lastFired = -Infinity;
   private invulnUntil = 0;
+  /** Set when the workshop closes; holds fire until the mouse button is released. */
+  private holdFire = false;
 
   constructor() {
     super('Game');
   }
 
+  get maxHull() {
+    return maxHullFor(this.plating, WORKSHOP_TUNING);
+  }
+
   create() {
-    this.world = generateWorld(WORLD_SEED);
-    this.inventory = createInventory();
-    this.hull = this.maxHull = HULL.max;
+    const save = this.readSave();
+    this.world = generateWorld(save?.seed ?? WORLD_SEED);
+    this.inventory = save?.inventory ?? createInventory();
+    this.plating = save?.upgrades.plating ?? false;
+    this.hull = this.maxHull;
+    this.fuel = this.maxFuel;
     this.resources.clear();
     this.drones.clear();
+    this.collected.clear();
+    this.destroyed.clear();
+    for (const id of save?.collected ?? []) this.collected.add(id);
+    for (const id of save?.destroyed ?? []) this.destroyed.add(id);
     this.lastFired = -Infinity;
     this.invulnUntil = 0;
+    this.docked = false;
+    this.workshopOpen = false;
+    this.holdFire = false;
     const { center } = this.world;
 
     this.physics.world.setBounds(0, 0, WORLD_SIZE, WORLD_SIZE);
@@ -96,7 +137,10 @@ export class GameScene extends Phaser.Scene {
     ship.setDepth(6);
     setCircleBody(ship, SHIP.bodyRadius);
 
-    for (const node of this.world.resources) this.addResourceNode(node);
+    for (const node of this.world.resources) if (!this.collected.has(node.id)) this.addResourceNode(node);
+    for (const d of save?.drops ?? []) {
+      if (!this.collected.has(d.id)) this.addResourceNode({ ...d, kind: 'scrap', angle: 0 });
+    }
 
     this.dust = this.add.particles(0, 0, 'dust', {
       emitting: false,
@@ -113,11 +157,18 @@ export class GameScene extends Phaser.Scene {
     });
     this.sparks.setDepth(14);
 
-    this.tank = new Tank(this, this.world.spawn.x, this.world.spawn.y);
+    let start = { x: this.world.spawn.x, y: this.world.spawn.y };
+    if (save) {
+      const t = clampTank(save.tank, this.maxHull, this.maxFuel, WORLD_SIZE, TANK.bodyRadius);
+      start = { x: t.x, y: t.y };
+      this.hull = t.hull;
+      this.fuel = t.fuel;
+    }
+    this.tank = new Tank(this, start.x, start.y);
     this.physics.add.collider(this.tank.hull, solids);
 
     const droneGroup = this.physics.add.group();
-    for (const p of this.world.drones) this.drones.set(p.id, new Drone(this, p, droneGroup));
+    for (const p of this.world.drones) if (!this.destroyed.has(p.id)) this.drones.set(p.id, new Drone(this, p, droneGroup));
     this.physics.add.collider(droneGroup, solids);
     this.physics.add.collider(droneGroup, droneGroup);
     this.physics.add.overlap(this.tank.hull, droneGroup, (_t, d) => this.onDroneContact(droneOf(d)));
@@ -128,11 +179,37 @@ export class GameScene extends Phaser.Scene {
 
     const cam = this.cameras.main;
     cam.setBounds(0, 0, WORLD_SIZE, WORLD_SIZE);
+    cam.centerOn(start.x, start.y);
     cam.startFollow(this.tank.hull, true, CAMERA.lerp, CAMERA.lerp);
 
     const kb = this.input.keyboard!;
-    this.keys = kb.addKeys({ up: 'W', down: 'S', left: 'A', right: 'D', interact: 'E' }) as Keys;
+    this.keys = kb.addKeys({
+      up: 'W',
+      down: 'S',
+      left: 'A',
+      right: 'D',
+      interact: 'E',
+      close: 'ESC',
+      one: 'ONE',
+      two: 'TWO',
+      three: 'THREE',
+    }) as Keys;
     this.keys.interact.on('down', () => this.interact());
+    this.keys.close.on('down', () => this.closeWorkshop());
+    this.keys.one.on('down', () => this.workshopOpen && this.workshopAction('refuel'));
+    this.keys.two.on('down', () => this.workshopOpen && this.workshopAction('repair'));
+    this.keys.three.on('down', () => this.workshopOpen && this.workshopAction('plating'));
+
+    // Autosave on a timer and when the page is hidden or closed.
+    this.time.addEvent({ delay: SAVE.autosaveMs, loop: true, callback: () => this.save() });
+    const onHide = () => document.visibilityState === 'hidden' && this.save();
+    const onPageHide = () => this.save();
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', onPageHide);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', onPageHide);
+    });
 
     this.scene.launch('Hud');
 
@@ -144,10 +221,13 @@ export class GameScene extends Phaser.Scene {
 
   update(time: number, delta: number) {
     const k = this.keys;
-    const input = {
-      x: (k.right.isDown ? 1 : 0) - (k.left.isDown ? 1 : 0),
-      y: (k.down.isDown ? 1 : 0) - (k.up.isDown ? 1 : 0),
-    };
+    // The tank holds still while the workshop is open.
+    const input = this.workshopOpen
+      ? { x: 0, y: 0 }
+      : {
+          x: (k.right.isDown ? 1 : 0) - (k.left.isDown ? 1 : 0),
+          y: (k.down.isDown ? 1 : 0) - (k.up.isDown ? 1 : 0),
+        };
 
     // Recompute the pointer's world position every frame: the camera moves
     // even when the mouse doesn't.
@@ -155,7 +235,9 @@ export class GameScene extends Phaser.Scene {
     const aim = pointer.positionToCamera(this.cameras.main) as Phaser.Math.Vector2;
 
     this.tank.update(input, aim, delta);
-    if (pointer.leftButtonDown() && canFire(time, this.lastFired, CANNON.cooldownMs)) this.fire(time);
+    if (!pointer.leftButtonDown()) this.holdFire = false;
+    const firing = pointer.leftButtonDown() && !this.workshopOpen && !this.holdFire;
+    if (firing && canFire(time, this.lastFired, CANNON.cooldownMs)) this.fire(time);
 
     // Camera lerp is applied once per frame; scale it so the follow feels the
     // same at 60 Hz and 144 Hz.
@@ -163,8 +245,17 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.setLerp(l, l);
     this.emitDust(delta);
 
+    this.fuel = burnFuel(this.fuel, this.tank.speed, TANK.maxSpeed, delta, FUEL.perSecond);
+    if (this.fuel <= 0) this.rescue('fuel');
+
     const c = this.world.center;
-    this.inSafeZone = Math.hypot(this.tank.x - c.x, this.tank.y - c.y) < SHIP.safeRadius;
+    const fromShip = Math.hypot(this.tank.x - c.x, this.tank.y - c.y);
+    this.inSafeZone = fromShip < SHIP.safeRadius;
+    const docked = fromShip < WORKSHOP.dockRadius;
+    if (docked && !this.docked) this.save();
+    this.docked = docked;
+    if (!docked) this.workshopOpen = false;
+
     for (const d of this.drones.values()) d.update(time, delta, this.tank, this.inSafeZone, c, SHIP.safeRadius);
 
     for (const s of this.shells.getChildren() as Phaser.Physics.Arcade.Image[]) {
@@ -180,6 +271,55 @@ export class GameScene extends Phaser.Scene {
     this.nearby = nearestInRange(this.tank, nodes, RESOURCES.interactRange);
   }
 
+  /** Runs a workshop action; saves when it succeeds. */
+  workshopAction(action: WorkshopAction) {
+    const status: TankStatus = { hull: this.hull, fuel: this.fuel, maxFuel: this.maxFuel, inventory: this.inventory, plating: this.plating };
+    const result = applyAction(status, action, WORKSHOP_TUNING);
+    if (result.ok) {
+      ({ hull: this.hull, fuel: this.fuel, inventory: this.inventory, plating: this.plating } = result.status);
+      this.save();
+    }
+    this.game.events.emit(WORKSHOP_EVENT, { action, ok: result.ok, message: result.message } satisfies WorkshopPayload);
+  }
+
+  /** Writes the current progress to localStorage. Returns false if it couldn't. */
+  save(): boolean {
+    const storage = browserStorage();
+    if (!storage) return false;
+    const drops = [...this.resources.values()]
+      .map((r) => r.node)
+      .filter((n) => n.id.endsWith('-drop'))
+      .map(({ id, amount, x, y }) => ({ id, amount, x, y }));
+    const data: SaveData = {
+      version: SAVE_VERSION,
+      seed: this.world.seed,
+      tank: { x: this.tank.x, y: this.tank.y, hull: this.hull, fuel: this.fuel },
+      inventory: this.inventory,
+      collected: [...this.collected],
+      destroyed: [...this.destroyed],
+      drops,
+      upgrades: { plating: this.plating },
+    };
+    return writeSave(storage, SAVE.key, data);
+  }
+
+  private readSave(): SaveData | undefined {
+    const storage = browserStorage();
+    if (!storage) return undefined;
+    // ?newgame wipes the save, then drops the flag so a reload resumes.
+    const params = new URLSearchParams(location.search);
+    if (params.has('newgame')) {
+      clearSave(storage, SAVE.key);
+      params.delete('newgame');
+      const query = params.toString();
+      history.replaceState(null, '', location.pathname + (query ? `?${query}` : '') + location.hash);
+      return undefined;
+    }
+    const save = loadSave(storage, SAVE.key);
+    if (!save && storage.getItem(SAVE.key) !== null) console.warn('Lonely Tank: ignoring an unreadable save and starting fresh.');
+    return save;
+  }
+
   private addResourceNode(node: ResourceNode) {
     let glow: Phaser.GameObjects.Image | undefined;
     if (node.kind === 'crystal') {
@@ -191,10 +331,25 @@ export class GameScene extends Phaser.Scene {
   }
 
   private interact() {
+    if (this.workshopOpen) return this.closeWorkshop();
     const node = this.nearby;
-    if (!node) return;
+    if (node) return this.collect(node);
+    if (this.docked) {
+      this.workshopOpen = true;
+      this.save();
+    }
+  }
+
+  private closeWorkshop() {
+    if (!this.workshopOpen) return;
+    this.workshopOpen = false;
+    this.holdFire = true;
+  }
+
+  private collect(node: ResourceNode) {
     const entry = this.resources.get(node.id)!;
     this.resources.delete(node.id);
+    this.collected.add(node.id);
     this.nearby = undefined;
     this.inventory = addResource(this.inventory, node.kind, node.amount);
 
@@ -254,6 +409,7 @@ export class GameScene extends Phaser.Scene {
     const { x, y } = drone;
     const p = drone.placement;
     this.drones.delete(p.id);
+    this.destroyed.add(p.id);
     drone.destroy();
 
     this.sparks.explode(18, x, y);
@@ -261,7 +417,7 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.shake(120, 0.004);
 
     if (p.drop > 0) {
-      this.addResourceNode({ id: `${p.id}-drop`, kind: 'scrap', amount: p.drop, x, y, angle: 0 });
+      this.addResourceNode({ id: `${p.id}-drop`, kind: 'scrap', amount: p.drop, x: Math.round(x), y: Math.round(y), angle: 0 });
     }
   }
 
@@ -277,11 +433,12 @@ export class GameScene extends Phaser.Scene {
     if (this.hull <= 0) this.rescue('destroyed');
   }
 
-  /** Returns the tank to the ship, repaired, minus a share of its salvage. */
+  /** Returns the tank to the ship, repaired and refueled, minus a share of its salvage. */
   rescue(reason: RescueReason) {
     const { inventory, lost } = rescuePenalty(this.inventory, RESCUE.salvageLoss);
     this.inventory = inventory;
     this.hull = this.maxHull;
+    this.fuel = this.maxFuel;
     this.invulnUntil = this.time.now + 1500;
 
     const { spawn } = this.world;
@@ -295,6 +452,7 @@ export class GameScene extends Phaser.Scene {
     cam.startFollow(this.tank.hull, true, CAMERA.lerp, CAMERA.lerp);
     cam.fadeIn(500, 0, 0, 0);
 
+    this.save();
     this.game.events.emit(RESCUED_EVENT, { reason, lost } satisfies RescuedPayload);
   }
 

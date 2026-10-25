@@ -104,3 +104,20 @@ export const DRONES = {
 export const RESCUE = {
   salvageLoss: 0.25, // fraction of each carried resource lost, rounded down
 } as const;
+
+export const FUEL = {
+  max: 100,
+  perSecond: 1, // burned at full speed; scales with speed, nothing while stopped
+  lowFraction: 0.2, // HUD warns below this
+} as const;
+
+export const WORKSHOP = {
+  dockRadius: 130, // px from the ship's center; the spawn point is inside it
+  repair: { scrap: 3, hull: 25 },
+  plating: { scrap: 8, crystal: 2, maxHull: 25 },
+} as const;
+
+export const SAVE = {
+  key: 'lonely-tank.save',
+  autosaveMs: 15000,
+} as const;

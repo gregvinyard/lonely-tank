@@ -54,7 +54,7 @@ All numbers live in `RESOURCES` in `src/data/tuning.ts`; placement is `generateW
 
 ## HUD (M2)
 
-- Top-left: scrap and crystal counts (with a `+N` pop on pickup) and the current goal.
+- Top-left: hull and fuel bars, scrap and crystal counts (with a `+N` pop on pickup) and the current goal.
 - Bottom-center: interaction prompt.
 - Compass: when the ship is off screen, a teal arrow sits on the screen edge pointing to it, with the distance (1 m = 10 px).
 
@@ -71,8 +71,25 @@ All numbers live in `HULL`, `CANNON`, `DRONES` and `RESCUE` in `src/data/tuning.
   - 60% leave 1–2 scrap (decided at world generation; the drop has id `<drone id>-drop`).
   - Hovering is shown by a bobbing ground shadow; the sprite never scales or rotates, to stay on the pixel grid.
 - **Hull:** 100. Drone contact does 10 damage, then the tank is invulnerable (blinking) for 0.6 s, so a pack can't stack hits. Screen shake and a brief red flash.
-- **Rescue:** at 0 hull the tank is returned to the ship, fully repaired, losing 25% of each carried resource (rounded down). Chasing drones go home. The same routine will handle running out of fuel in M4.
+- **Rescue:** at 0 hull the tank is returned to the ship, fully repaired and refueled, losing 25% of each carried resource (rounded down). Chasing drones go home. Running out of fuel triggers the same rescue (M4).
+
+## Expedition loop (M4)
+
+Numbers live in `FUEL`, `WORKSHOP` and `SAVE` in `src/data/tuning.ts`.
+
+- **Fuel:** 100. Burns 1 unit per second at full speed, scaled by speed, nothing while stopped. That's about 100 s of full-throttle driving; the map edge is ~6 s from the ship. The HUD bar turns red and blinks below 20%. At 0 the tank is rescued.
+- **Workshop:** within 130 px of the ship's center (the spawn point is inside), press E. The tank stops while it's open; keys 1/2/3 or clicking a row run an action, E or Esc closes it. Unavailable actions are dimmed and pressing them says why.
+  - Refuel: free.
+  - Repair: 3 scrap for +25 hull, capped at max.
+  - Craft reinforced plating: 8 scrap + 2 crystal, +25 max hull (also adds 25 to current hull). Once only. Shows a success banner; exploration continues.
+- **Hull bar** length grows with max hull (48 px → 60 px with plating) so the upgrade reads as more, not as damage.
+- **Objective:** the goal strip tracks progress (`scrap 3/8 crystal 0/2`), then says to return to the ship, then that the plating is installed.
+- **Save:** localStorage key `lonely-tank.save`, schema version 1. Stores the world seed, tank position/hull/fuel, inventory, collected resource ids, destroyed drone ids, uncollected drone drops (with positions) and the plating flag. Max hull is derived from the plating flag, never stored.
+  - Saved on reaching the ship, on opening the workshop, after every successful workshop action, after a rescue, every 15 s, and when the page is hidden or closed.
+  - Missing, corrupted or other-version saves are ignored (with a console warning) and a new game starts; storage errors never stop the game. Loaded values are clamped (position inside the world, hull 1..max, fuel 0..max).
+  - Drones always restart at home on load.
 
 ## Debug
 
 - Add `?debug` to the URL to draw physics bodies.
+- Add `?newgame` to the URL to delete the save and start over (the flag is removed from the address so a reload resumes).

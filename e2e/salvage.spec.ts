@@ -25,7 +25,8 @@ test.beforeEach(async ({ page }) => {
 test('driving onto a resource and pressing E salvages it', async ({ page }) => {
   const start = await state(page);
   expect(start.inventory).toEqual({ scrap: 0, crystal: 0 });
-  expect(start.prompt).toBeNull();
+  // At the ship the only prompt is the workshop.
+  expect(start.prompt).toBe('[E] OPEN WORKSHOP');
 
   for (const kind of ['scrap', 'crystal'] as const) {
     // Park the tank just left of the first node of this kind, then drive onto it.
@@ -54,10 +55,15 @@ test('driving onto a resource and pressing E salvages it', async ({ page }) => {
   }
 });
 
-test('pressing E with nothing nearby does nothing', async ({ page }) => {
+test('pressing E away from the ship with nothing nearby does nothing', async ({ page }) => {
+  await page.evaluate(`${SCENE}.tank.hull.body.reset(${SCENE}.world.spawn.x, ${SCENE}.world.spawn.y + 160)`);
+  await page.waitForTimeout(50);
+  expect((await state(page)).prompt).toBeNull();
   await page.keyboard.press('e');
+  await page.waitForTimeout(50);
   const s = await state(page);
   expect(s.inventory).toEqual({ scrap: 0, crystal: 0 });
+  expect(await page.evaluate(`${SCENE}.workshopOpen`)).toBe(false);
 });
 
 test('compass shows far from the ship and hides near it', async ({ page }) => {

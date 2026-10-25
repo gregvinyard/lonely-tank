@@ -37,6 +37,7 @@ export function placeRocks(o: RockOptions): RockPlacement[] {
 }
 
 export interface World {
+  seed: number;
   center: { x: number; y: number };
   spawn: { x: number; y: number };
   rocks: RockPlacement[];
@@ -78,5 +79,5 @@ export function generateWorld(seed: number): World {
     minSpacing: DRONES.minSpacing,
     dropChance: DRONES.scrapDropChance,
   });
-  return { center, spawn: { x: center.x, y: center.y + SHIP.spawnOffsetY }, rocks, resources, drones };
+  return { seed, center, spawn: { x: center.x, y: center.y + SHIP.spawnOffsetY }, rocks, resources, drones };
 }

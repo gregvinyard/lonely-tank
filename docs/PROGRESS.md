@@ -40,7 +40,7 @@ Developer feedback: good; asked for everything to share one pixel resolution.
 - The game renders at a low virtual resolution, scaled up by a whole number of device pixels, so world, particles and HUD share one pixel grid (also under OS display scaling).
 - Built-in 5×7 pixel font for HUD text.
 
-## M3 — Hostile Encounters ✅ (awaiting playtest)
+## M3 — Hostile Encounters ✅
 
 - Cannon: hold left mouse, cooldown, shells hit rocks/ship/drones, muzzle flash and sparks.
 - 10 sentry drones: patrol, chase within range, give up on distance/leash/safe zone, never enter the safe zone.
@@ -51,14 +51,23 @@ Developer feedback: good; asked for everything to share one pixel resolution.
 
 **Verified:** typecheck ✅, 48 unit tests ✅, 13 browser tests ✅ (adds: shooting destroys a drone and leaves salvage, fire cooldown, rescue with penalty, drones stay out of the safe zone, window resize keeps the pixel grid).
 
+Developer feedback: looks good.
+
+## M4 — Complete Expedition Loop ✅ (awaiting playtest) — v0.1 vertical slice
+
+- Fuel: burns while moving, HUD bar with low-fuel warning, rescue when empty.
+- Workshop at the ship (E): refuel (free), repair (3 scrap → +25 hull), craft reinforced plating (8 scrap + 2 crystal → +25 max hull, once). Keys 1/2/3 or click.
+- Objective tracking in the HUD and a success banner when the plating is crafted.
+- localStorage save (schema v1) with validation; autosave at the ship, after workshop actions and rescues, every 15 s, and on page hide. `?newgame` wipes it.
+
+**Verified:** typecheck ✅, 77 unit tests ✅, 20 browser tests ✅ (adds: fuel burn, out-of-fuel rescue, workshop actions incl. click without firing, no driving in the workshop, reload restores collected/destroyed/drops/plating/position, corrupted save starts fresh, `?newgame`).
+
 ## Next
 
-- Developer playtest of M3, then M4 — Complete Expedition Loop (fuel, workshop, plating upgrade, saving).
+- Developer playtest of M4, then M5 — small polish pass (remaining PixelLab art such as rocks and ground, tuning).
 
 ## Known issues
 
 - Phaser 4.2.1 multi-texture batching bug under software WebGL: parts of the rotated turret went missing. Worked around with `render.maxTextures: 1`; guarded by `e2e/render.spec.ts`. Not reproduced on a real GPU (RTX 5080 / D3D11). Could be reported upstream.
 - Rocks and ground are still code-drawn placeholders.
-- Inventory resets on reload until the save system (M4).
-- Rescue on running out of fuel is built (`rescue('fuel')`) but fuel itself arrives in M4.
-- Escape to pause (in the spec's controls table) isn't scheduled in any milestone yet.
+- Escape to pause (in the spec's controls table) isn't scheduled in any milestone yet; Esc currently only closes the workshop.
