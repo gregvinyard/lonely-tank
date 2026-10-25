@@ -10,7 +10,9 @@ describe('ship door', () => {
   it('opens for a nearby tank and stays open while it passes through', () => {
     expect(doorTarget('outside', { x: mouth.x, y: mouth.y + 60 }, L)).toBe(1);
     expect(doorTarget('outside', { x: mouth.x, y: mouth.y + L.openDistance + 5 }, L)).toBe(0);
-    for (const s of ['entering', 'inside', 'exiting'] as const) expect(doorTarget(s, { x: 9999, y: 9999 }, L)).toBe(1);
+    for (const s of ['entering', 'exiting'] as const) expect(doorTarget(s, { x: 9999, y: 9999 }, L)).toBe(1);
+    // Parked inside, it shuts behind the tank.
+    expect(doorTarget('inside', L.hold, L)).toBe(0);
   });
 
   it('slides at a steady rate and stops at its target', () => {
@@ -67,8 +69,12 @@ describe('ship geometry', () => {
     expect(stop).toBeLessThanOrEqual(mouth.y + L.mouthDepth - 4);
   });
 
-  it('hides the hold and keeps the exit clear', () => {
-    expect(overHull(L.hold, L)).toBe(true);
+  it('parks the tank inside the door opening and keeps the exit clear', () => {
+    // The tank (about 36 wide and 40 long facing up) fits within the door, so the shutter covers it.
+    expect(L.hold.x - 18).toBeGreaterThanOrEqual(L.door.x);
+    expect(L.hold.x + 18).toBeLessThanOrEqual(L.door.x + L.door.w);
+    expect(L.hold.y - 20).toBeGreaterThanOrEqual(L.door.y);
+    expect(L.hold.y + 20).toBeLessThanOrEqual(L.door.y + L.door.h);
     expect(overHull(L.exit, L, TANK.bodyRadius + 10)).toBe(false);
     expect(Math.hypot(L.exit.x - mouth.x, L.exit.y - mouth.y)).toBeLessThan(L.openDistance);
   });

@@ -155,3 +155,29 @@ test('clicks where the closed workshop buttons were do nothing', async ({ page }
   expect(await read<number>(page, `Object.values(${SCENE}.levels).reduce((a, b) => a + b, 0)`)).toBe(0);
   expect(await read<number>(page, `${SCENE}.fuel`)).toBe(30);
 });
+
+// Buttons are containers drawn from their top-left; their hit areas must cover
+// exactly what's drawn, at any display scaling (fractional on many Windows setups).
+for (const dpr of [1, 1.25]) {
+  test.describe(`at ${dpr}x display scaling`, () => {
+    test.use({ deviceScaleFactor: dpr, viewport: { width: 1536, height: 730 } });
+
+    test('clicks land on the card that is drawn there', async ({ page }) => {
+      await enter(page);
+      const box = (await page.locator('canvas').boundingBox())!;
+      const r = await read<{ x: number; y: number; w: number; h: number }>(
+        page,
+        `(() => { const b = ${HUD}.workshop.cards[5].bg.getBounds(); const z = ${GAME}.scale.zoom; return { x: b.x * z, y: b.y * z, w: b.width * z, h: b.height * z }; })()`,
+      );
+      const clickAt = async (fx: number, fy: number) => {
+        await page.evaluate(`${HUD}.workshop.select(0)`);
+        await page.mouse.click(box.x + r.x + r.w * fx, box.y + r.y + r.h * fy);
+        await page.waitForTimeout(40);
+        return read<number>(page, `${HUD}.workshop.selected`);
+      };
+      for (const [fx, fy] of [[0.15, 0.15], [0.85, 0.15], [0.15, 0.85], [0.85, 0.85]]) expect(await clickAt(fx, fy), `${fx},${fy}`).toBe(5);
+      // Just outside its top-left corner is not this card.
+      expect(await clickAt(-0.1, -0.1)).not.toBe(5);
+    });
+  });
+}

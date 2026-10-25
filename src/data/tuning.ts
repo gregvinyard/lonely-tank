@@ -85,13 +85,14 @@ export const SHIP = {
       { x: 64, y: 80, r: 30 },
     ],
     door: { x: -27, y: 67, w: 55, h: 45 },
-    hold: { x: 0, y: 40 },
+    hold: { x: 0, y: 89 }, // parked in the open bay, under where the door shuts
     exit: { x: 0, y: 172 },
     openDistance: 120,
     mouthDepth: 34,
   },
   doorMs: 450, // door fully opening or closing
   driveSpeed: 110, // px/sec rolling in or out under the ship's control
+  turnRoom: 26, // px short of the exit where the tank, backed out, turns round
   exitInvulnMs: 1200, // fresh out of the door, nothing can hurt the tank yet
 } as const;
 

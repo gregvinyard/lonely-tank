@@ -112,6 +112,18 @@ export const ASSETS: AssetDef[] = [
     },
   },
   {
+    // Cargo bay floor (the opening is cut out of the ship) plus the loading
+    // ramp below it. Drawn under the tank, so the tank drives onto it.
+    key: 'ship_bay',
+    file: 'assets/ship_bay.png',
+    width: 55,
+    height: 67,
+    placeholder: (g) => {
+      g.fillStyle(0x1c1a1e).fillRect(0, 0, 55, 49);
+      g.fillStyle(0x5c5b64).fillRect(0, 49, 55, 16);
+    },
+  },
+  {
     // Cargo door shutter, 55x45, drawn over the bay opening; slides up to open.
     key: 'ship_door',
     file: 'assets/ship_door.png',

@@ -113,6 +113,10 @@ export class GameScene extends Phaser.Scene {
   /** The cargo door shutter; it slides up into the hull to open. */
   private door!: Phaser.GameObjects.Image;
   private shipSmokeMs = 0;
+  /** The menu has been shown for this stay in the ship. */
+  private menuShown = false;
+  /** Leaving: the tank has started rolling out of the open door. */
+  private rollingOut = false;
   /** Rocks and the ship, grown by a drone's radius, for steering. */
   private droneObstacles: Circle[] = [];
   /** Rock collision circles, for burrowers (which pass under them). */
@@ -189,6 +193,8 @@ export class GameScene extends Phaser.Scene {
       setCircleBody(part, c.r);
     }
     const door = SHIP.layout.door;
+    // The bay floor and ramp sit under the tank; the shutter closes over it.
+    this.add.image(center.x + door.x, center.y + door.y, 'ship_bay').setOrigin(0, 0).setDepth(9);
     this.door = this.add.image(center.x + door.x, center.y + door.y, 'ship_door').setOrigin(0, 0).setDepth(11.6);
     this.shipSmokeMs = 0;
 
@@ -382,6 +388,14 @@ export class GameScene extends Phaser.Scene {
     this.door.setCrop(0, hidden, d.w, d.h - hidden).setY(c.y + d.y - hidden);
 
     if (this.shipState === 'outside' && atDoorway(rel, this.doorOpen, SHIP.layout)) this.enterShip();
+    // Parked: the menu opens once the door has shut behind the tank.
+    if (this.shipState === 'inside' && this.doorOpen === 0 && !this.workshopOpen && !this.menuShown) {
+      this.menuShown = true;
+      this.workshopOpen = true;
+      sfx.play('open');
+    }
+    // Leaving: roll out once the door is fully open.
+    if (this.shipState === 'exiting' && this.doorOpen === 1 && !this.rollingOut) this.rollOut();
 
     // A wisp of smoke from the wreck's broken engine.
     this.shipSmokeMs += delta;
@@ -401,22 +415,29 @@ export class GameScene extends Phaser.Scene {
     this.save();
     this.driveTank(entryPath(SHIP.layout).map((p) => ({ x: c.x + p.x, y: c.y + p.y })), () => {
       this.shipState = 'inside';
-      this.workshopOpen = true;
-      sfx.play('open');
+      this.menuShown = false;
       this.save();
     });
   }
 
   /** Closes the ship menu and rolls the tank back out of the door, facing away from the ship. */
   exitShip() {
-    if (this.shipState !== 'inside') return;
-    const c = this.world.center;
-    const L = SHIP.layout;
+    if (this.shipState !== 'inside' || !this.workshopOpen) return;
     this.workshopOpen = false;
     this.holdFire = true;
     this.shipState = 'exiting';
+    this.rollingOut = false;
+  }
+
+  /** The door is open: drive down the ramp and away from the ship. */
+  private rollOut() {
+    const c = this.world.center;
+    const L = SHIP.layout;
+    this.rollingOut = true;
     this.tank.hull.setPosition(c.x + L.hold.x, c.y + L.hold.y);
-    this.driveTank([{ x: c.x + L.exit.x, y: c.y + L.exit.y }], () => {
+    // Back down the ramp, turn round clear of the ship, and drive off.
+    const clear = { x: c.x + L.hold.x, y: c.y + L.exit.y - SHIP.turnRoom, reverse: true };
+    this.driveTank([clear, { x: c.x + L.exit.x, y: c.y + L.exit.y }], () => {
       const at = { x: this.tank.x, y: this.tank.y };
       const facing = this.tank.hull.rotation;
       this.leaveShipNow();
@@ -435,24 +456,34 @@ export class GameScene extends Phaser.Scene {
     this.tankBody.enable = true;
   }
 
-  /** Drives the tank (physics off) through each point in turn at the ship's driving speed, facing the way it goes. */
-  private driveTank(points: { x: number; y: number }[], done: () => void): void {
+  /**
+   * Drives the tank (physics off) through each point in turn at the ship's
+   * driving speed, facing the way it goes (or away from it when reversing).
+   * Small turns happen on the move; a big one (turning round) happens first, in place.
+   */
+  private driveTank(points: DriveLeg[], done: () => void): void {
     const [p, ...rest] = points;
     if (!p) return done();
     const hull = this.tank.hull;
     const dist = Math.hypot(p.x - hull.x, p.y - hull.y);
     if (dist < 1) return this.driveTank(rest, done);
-    // Swing round to face the way it's going (the short way), then roll there.
-    const facing = Math.atan2(p.y - hull.y, p.x - hull.x);
+    const facing = Math.atan2(p.y - hull.y, p.x - hull.x) + (p.reverse ? Math.PI : 0);
     const turn = Phaser.Math.Angle.Wrap(facing - hull.rotation);
-    this.tweens.add({ targets: hull, rotation: hull.rotation + turn, duration: Math.abs(turn) * 160 });
-    this.tweens.add({
-      targets: hull,
-      x: p.x,
-      y: p.y,
-      duration: (dist / SHIP.driveSpeed) * 1000,
-      onComplete: () => this.driveTank(rest, done),
-    });
+    const roll = () =>
+      this.tweens.add({
+        targets: hull,
+        x: p.x,
+        y: p.y,
+        duration: (dist / SHIP.driveSpeed) * 1000,
+        onComplete: () => this.driveTank(rest, done),
+      });
+    const turnMs = Math.abs(turn) * 140;
+    if (Math.abs(turn) > 1) {
+      this.tweens.add({ targets: hull, rotation: hull.rotation + turn, duration: turnMs, onComplete: roll });
+      return;
+    }
+    if (turnMs > 0) this.tweens.add({ targets: hull, rotation: hull.rotation + turn, duration: turnMs });
+    roll();
   }
 
   private get tankBody() {
@@ -853,6 +884,14 @@ function setCircleBody(img: Phaser.Physics.Arcade.Image, radius: number) {
   // StaticBody.setCircle stores an offset without moving the body by it;
   // setOffset does move it, so apply the offset separately.
   body.setCircle(radius).setOffset(img.width / 2 - radius, img.height / 2 - radius);
+}
+
+/** One stretch of a scripted drive through the ship's door. */
+interface DriveLeg {
+  x: number;
+  y: number;
+  /** Drive backwards: keep facing the other way. */
+  reverse?: boolean;
 }
 
 function droneOf(obj: unknown): Drone {

@@ -141,6 +141,13 @@ Developer feedback: good; rocks needed size variety and jiggled while moving (fi
 
 **Verified:** typecheck ✅, 136 unit tests ✅ (adds the world-layout lock, door logic, hull geometry and rock gaps, the E lane never clipping the hull, drones getting home from beside the ship), 49 browser tests ✅ (adds: door opens and shuts, driving in opens the menu and calms drones, the Leave ship button rolls the tank out facing south without firing, the hull is solid, old save relocation, saving from inside). The changed browser specs passed 3 times in a row.
 
+### M12 follow-up (playtest feedback)
+
+- **Driving in looked like driving under the ship.** The bay floor and a new loading ramp now draw beneath the tank. The tank parks in the open bay, the door shuts over it, then the menu opens. Leaving: the door opens, the tank backs down the ramp, turns, and drives off.
+- **Menu clicks were off.** Every UI button's click area was shifted up and left by half its size (Phaser centres container hit areas). Fixed, with a corner-click test at 1× and 1.25× display scaling.
+
+**Verified:** 136 unit tests ✅, 51 browser tests ✅.
+
 ## Next
 
 - Developer playtest of v0.4.

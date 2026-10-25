@@ -44,10 +44,11 @@ test('driving into the door takes the tank inside, opens the menu and calms the 
       const s = ${SCENE};
       const c = s.world.center;
       const rel = { x: s.tank.x - c.x, y: s.tank.y - c.y };
-      return { state: s.shipState, menu: ${HUD}.workshop.visible, hidden: rel.y < 60 && Math.abs(rel.x) < 30, body: s.tank.hull.body.enable, drone: [...s.drones.values()][0].brain.mode };
+      const parked = Math.abs(rel.x - s.shipLayout.hold.x) < 1 && Math.abs(rel.y - s.shipLayout.hold.y) < 1;
+      return { state: s.shipState, menu: ${HUD}.workshop.visible, parked, doorShut: s.doorOpen === 0, body: s.tank.hull.body.enable, drone: [...s.drones.values()][0].brain.mode };
     })()`,
   );
-  expect(r).toEqual({ state: 'inside', menu: true, hidden: true, body: false, drone: 'return' });
+  expect(r).toEqual({ state: 'inside', menu: true, parked: true, doorShut: true, body: false, drone: 'return' });
 });
 
 test('leaving the menu drives the tank back out, facing away from the ship', async ({ page }) => {

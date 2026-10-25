@@ -14,7 +14,7 @@ export interface ShipLayout {
   hull: readonly Circle[];
   /** The cargo door opening in the art: left, top, width, height. */
   door: { x: number; y: number; w: number; h: number };
-  /** Where the tank comes to rest inside, hidden by the hull. */
+  /** Where the tank parks in the cargo bay; the door shuts over it. */
   hold: Vec;
   /** Where the tank comes out and is placed after a rescue, just clear of the door. */
   exit: Vec;
@@ -37,8 +37,9 @@ export function doorMouth(l: ShipLayout): Vec {
   return { x: l.door.x + l.door.w / 2, y: l.door.y + l.door.h };
 }
 
-/** How open the door should be: wide open while the tank is near or passing through. */
+/** How open the door should be: open for a nearby tank or one rolling through, shut once it's parked inside. */
 export function doorTarget(state: ShipState, tank: Vec, l: ShipLayout): number {
+  if (state === 'inside') return 0;
   if (state !== 'outside') return 1;
   const m = doorMouth(l);
   return Math.hypot(tank.x - m.x, tank.y - m.y) < l.openDistance ? 1 : 0;
@@ -71,9 +72,9 @@ export function inFrontOfDoor(tank: Vec, l: ShipLayout): boolean {
   return Math.abs(tank.x - m.x) <= FRONT_LANE && tank.y >= m.y && Math.hypot(tank.x - m.x, tank.y - m.y) < l.openDistance;
 }
 
-/** The route the ship drives the tank in by: straight to the doorway, then into the hold. */
+/** The route the ship drives the tank in by: straight to the doorway, then up the ramp into the bay. */
 export function entryPath(l: ShipLayout): Vec[] {
-  return [doorMouth(l), { ...l.hold }];
+  return [{ x: l.hold.x, y: doorMouth(l).y }, { ...l.hold }];
 }
 
 /** True if a point (relative to the ship center) is within `pad` of the hull. */

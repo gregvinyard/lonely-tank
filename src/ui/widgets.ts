@@ -135,8 +135,10 @@ export class Button extends Phaser.GameObjects.Container {
     this.disabledBg = frame(scene, 'ui_button_disabled', 0, 0, w, h).setVisible(false);
     this.add([this.bg, this.hover, this.disabledBg]);
     this.setSize(w, h);
-    // Containers hit-test around their center; give an explicit top-left rectangle instead.
-    this.setInteractive(new Phaser.Geom.Rectangle(0, 0, w, h), Phaser.Geom.Rectangle.Contains);
+    // Phaser hit-tests a container as if its contents were centered on it (it
+    // adds half the size to the pointer's local position), but ours are drawn
+    // from the top-left. Shift the rectangle by half a size so it covers what's drawn.
+    this.setInteractive(new Phaser.Geom.Rectangle(w / 2, h / 2, w, h), Phaser.Geom.Rectangle.Contains);
     this.on('pointerover', () => this.setHovered(true));
     this.on('pointerout', () => this.setHovered(false));
     this.on('pointerdown', () => onClick());

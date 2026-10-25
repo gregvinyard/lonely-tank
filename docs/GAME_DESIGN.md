@@ -153,18 +153,18 @@ All numbers live in `BURROWERS` in `src/data/tuning.ts`; logic in `src/systems/b
 Geometry and timings in `SHIP` (`src/data/tuning.ts`). Pure door and footprint logic in `src/systems/ship.ts`, unit tested in `tests/ship.test.ts`.
 
 - **Size and solidity:** a 320×256 wreck at the world center, nose north, about 2.5× the old one. Its hull is eleven invisible collision circles (nose, fuselage, cargo bay, wings, wing roots, engine pods), checked against the art with `?debug`. Tanks, drones and shells all hit it, and drones steer around it.
-- **Cargo door:** at the bottom center, facing the spawn. It slides up into the hull when the tank's center comes within 120 px of the doorway, and shuts again when the tank leaves. The shutter is a separate sprite cropped in whole-pixel steps, and the opening behind it is a dark hold painted into the ship's art.
+- **Cargo door:** at the bottom center, facing the spawn. It slides up into the hull when the tank's center comes within 120 px of the doorway, and shuts again when the tank leaves. The shutter is a separate sprite cropped in whole-pixel steps, drawn above the tank. The opening is cut out of the ship image and filled by a separate `ship_bay` sprite drawn *below* the tank: the bay floor, the door sill and a loading ramp outside it.
 - **Going in:**
   - Drive into the open doorway. The hull stops the tank just below it, and that counts; it may be up to 12 px off either side of the door.
   - Or press E in front of the door: within 40 px either side of its middle and 120 px below it. A unit test checks that the run in from anywhere in that lane never cuts through the hull.
-  - The ship takes over: physics off, it rolls the tank in at 110 px/s, turning smoothly. The ship draws above the tank, so it vanishes into the hold.
-  - Once inside, the ship menu (the workshop) opens and the game saves.
+  - The ship takes over: physics off, it rolls the tank up the ramp at 110 px/s, turning smoothly, and parks it in the open bay. The tank is drawn on the bay floor the whole way, so it never looks like it drives under the ship.
+  - The door then shuts over the parked tank and the ship menu (the workshop) opens. The game saves on the way in.
 - **Safety:** you're safe only inside. While entering, inside or leaving:
   - the tank can't be damaged, burns no fuel and can't fire
   - drones and burrowers lose interest
   - there's no visible "safe zone" any more
 - **Leaving:**
-  - E, Esc, or the **Leave ship** button closes the menu. The tank rolls out to the spawn point, 60 px below the door, facing south.
+  - E, Esc, or the **Leave ship** button closes the menu. The door opens, the tank backs down the ramp, turns round clear of the ship, and drives to the spawn point 60 px below the door, facing south.
   - You then get control back with 1.2 s of invulnerability (the tank blinks), and fire is held until the mouse is released.
   - The door shuts once you drive away.
 - **Rescue:** puts the tank at the spawn point outside the door, door open.
@@ -178,4 +178,5 @@ Geometry and timings in `SHIP` (`src/data/tuning.ts`). Pure door and footprint l
   - Burrower-01's roaming range plus its tread sense overlaps the door area by about 64 px, so it can come for a tank sitting by the door.
   - Burrowers never surface within 70 px of the doorway or under the ship.
 - **Wreck dressing:** scorch marks under the ship and a wisp of smoke from the right engine.
+- **UI buttons (fix):** Phaser hit-tests a container as if its contents were centred on it, but the kit's buttons draw from their top-left. Every button's click area was therefore shifted up and left by half its size, which you notice most with display scaling. The hit rectangle is now offset by half a size, and a browser test clicks near all four corners of a card at 1× and 1.25× display scaling.
 
