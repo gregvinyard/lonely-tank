@@ -49,6 +49,7 @@ test('keyboard: select a card and build it with Space', async ({ page }) => {
   expect(r).toMatchObject({ plating: 1, maxHull: 125, hull: 125, inventory: { scrap: 0, crystal: 0, circuit: 0 } });
   expect(r.banner).toContain('REINFORCED PLATING 1 BUILT');
   expect(r.goal).toBe('GOAL: REACH TIER 2 IN ANY UPGRADE');
+  expect(await read<string>(page, `${HUD}.toast.visible && ${HUD}.toast.text.text`)).toBe('GOAL COMPLETE!');
 
   // Not enough for tier 2: nothing is spent.
   await press(page, 'Space');
@@ -111,4 +112,25 @@ test('field repair mends the hull at rest, after a calm period', async ({ page }
   await page.evaluate(`(() => { const s = ${SCENE}; s.inventory = ${RICH}; s.buildUpgrade('plating'); s.buildUpgrade('repairKit'); s.buildUpgrade('repairKit'); s.hull = 50; })()`);
   await page.waitForTimeout(1500);
   expect(await read<number>(page, `${SCENE}.hull`)).toBeGreaterThan(51);
+});
+
+test('the whole tree can be built to the top of the goal ladder', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  const built = await read<number>(
+    page,
+    `(() => {
+      const s = ${SCENE};
+      s.inventory = { scrap: 9999, crystal: 9999, circuit: 9999 };
+      let n = 0;
+      // Keep building until nothing more can be built (respects requirements by retrying).
+      for (let pass = 0; pass < 5; pass++) for (const id of Object.keys(s.levels)) while (s.levels[id] < 3) { const before = s.levels[id]; s.buildUpgrade(id); if (s.levels[id] === before) break; n++; }
+      return n;
+    })()`,
+  );
+  await page.waitForTimeout(100);
+  expect(built).toBe(20);
+  expect(await read<string>(page, `${HUD}.goal.text.text`)).toBe('FULLY UPGRADED · EXPLORE FREELY');
+  expect(await read<Record<string, number>>(page, `${SCENE}.stats`)).toMatchObject({ maxHull: 175, maxFuel: 220, damage: 3, scanner: 2 });
+  expect(errors).toEqual([]);
 });

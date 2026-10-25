@@ -50,6 +50,8 @@ export class HudScene extends Phaser.Scene {
   private fuelBar!: Bar;
   private shownHull = -1;
   private goal!: Plate;
+  /** Goal ladder rung last shown, to celebrate climbing it. */
+  private shownGoal = '';
   prompt!: Plate;
   promptText!: Phaser.GameObjects.BitmapText;
   private safeZone!: Plate;
@@ -65,7 +67,7 @@ export class HudScene extends Phaser.Scene {
   private pauseDim!: Phaser.GameObjects.Rectangle;
   private pausePanel!: Phaser.GameObjects.Container;
   private warning!: Plate;
-  private toast!: Plate;
+  toast!: Plate;
   private toastTimer?: Phaser.Time.TimerEvent;
   /** Tracked here because scene.pause() only takes effect on the next step. */
   paused = false;
@@ -77,6 +79,7 @@ export class HudScene extends Phaser.Scene {
   create() {
     this.game_ = this.scene.get('Game') as GameScene;
     this.shownHull = -1;
+    this.shownGoal = '';
     this.paused = false;
 
     this.createStatsPanel();
@@ -197,7 +200,12 @@ export class HudScene extends Phaser.Scene {
   private updateGoal() {
     const g = this.game_;
     const s = goalText(g.levels);
-    if (this.goal.text.text !== s.toUpperCase()) this.goal.setLabel(s);
+    if (this.goal.text.text !== s.toUpperCase()) {
+      // A new rung (but not the one shown at start-up) means the last goal was met.
+      if (this.shownGoal) this.showToast('Goal complete!', 'icon_up', 3000);
+      this.shownGoal = s;
+      this.goal.setLabel(s);
+    }
     this.goal.setPosition(4, this.panel.y + this.panel.height + 2);
   }
 
@@ -251,10 +259,11 @@ export class HudScene extends Phaser.Scene {
     centerOn(this.warning, width / 2, 12);
   }
 
-  private showToast(message: string) {
-    this.toast.setLabel(message).setVisible(true);
+  showToast(message: string, icon?: string, ms = 1500) {
+    this.toast.setIcon(icon);
+    this.toast.setLabel(message, icon ? COLOR.accent : COLOR.text).setVisible(true);
     this.toastTimer?.remove();
-    this.toastTimer = this.time.delayedCall(1500, () => this.toast.setVisible(false));
+    this.toastTimer = this.time.delayedCall(ms, () => this.toast.setVisible(false));
   }
 
   private updateWorkshop(width: number, height: number) {

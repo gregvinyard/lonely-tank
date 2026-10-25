@@ -2,9 +2,11 @@
 
 A top-down pixel-art survival exploration game. You're stranded on an alien planet with a crashed ship and a small armored tank. Drive out into the wasteland, salvage what you can, and get home in one piece.
 
-Built with [Phaser 4](https://phaser.io) + TypeScript + Vite. Hosted on Cloudflare Pages.
+Salvage scrap, crystals and circuits, fight off sentry drones, and climb an eight-line upgrade tree at your ship's workshop. Salvage regrows and drones return over time, so the wasteland keeps paying out.
 
-See [`docs/SPEC.md`](docs/SPEC.md) for the full design specification and [`docs/PROGRESS.md`](docs/PROGRESS.md) for current status.
+Built with [Phaser 4](https://phaser.io) + TypeScript + Vite. Hosted on Cloudflare Workers (static assets).
+
+See [`docs/SPEC.md`](docs/SPEC.md) (v0.1) and [`docs/SPEC_v0.2.md`](docs/SPEC_v0.2.md) for the design specifications, [`docs/GAME_DESIGN.md`](docs/GAME_DESIGN.md) for the numbers, and [`docs/PROGRESS.md`](docs/PROGRESS.md) for current status.
 
 ## Local development
 

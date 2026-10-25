@@ -87,7 +87,7 @@ Developer feedback: good; rocks needed size variety and jiggled while moving (fi
 
 ## M7 — Upgrade tree and workshop screen ✅
 
-- 8 upgrade lines (22 tiers) as data, one stats module applying all effects, requirements between lines.
+- 8 upgrade lines (20 tiers) as data, one stats module applying all effects, requirements between lines.
 - Workshop screen: services, card grid with tier pips, detail pane with costs, Build button; mouse and keyboard.
 - Circuits (pulled in from M8): every drone drops one; costs and HUD use them.
 - Goal ladder replaces the single plating objective.
@@ -104,9 +104,17 @@ Developer feedback: good; rocks needed size variety and jiggled while moving (fi
 
 **Verified:** typecheck ✅, 99 unit tests ✅, 34 browser tests ✅ (adds: salvage regrowth and its clearance, drone return and fresh drop ids, timers across reload, play time paused).
 
+## M9 — Balance and polish ✅
+
+- Balance checked against world supply: one full sweep yields ~81 scrap, 23 crystal, 10 circuits; maxing all 20 tiers costs 261 / 73 / 29 (~3.2 sweeps), paced by the 4–5 minute regrow and return timers. Guarded by `tests/balance.test.ts` (2–5 sweeps; a first upgrade affordable from near the ship).
+- "Goal complete!" notice when the goal ladder moves up a rung.
+- Whole-tree build test: all 20 tiers, final goal text, final stats, no errors.
+
+**Verified:** typecheck ✅, 101 unit tests ✅, 35 browser tests ✅, locally and live.
+
 ## Next
 
-- M9 — Balance and polish.
+- Developer playtest of v0.2.
 
 ## Known issues
 
@@ -114,3 +122,5 @@ Developer feedback: good; rocks needed size variety and jiggled while moving (fi
   - Multi-texture batching under software WebGL dropped parts of the rotated turret → `render.maxTextures: 1`; guarded by `e2e/render.spec.ts`. Not reproduced on a real GPU.
   - `StaticBody.setCircle` stores its offset without moving the body → offset applied with `setOffset`.
   - Keyboard queue re-dispatched when several keys arrive in one frame → `keyOnce` wrapper.
+- The small boulder in the two-boulder rock (`rock_3`) isn't solid.
+- `circuit.png` is diamond-shaped without an outline; readable, but could be regenerated.
