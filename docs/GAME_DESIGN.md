@@ -71,13 +71,13 @@ All numbers live in `HULL`, `CANNON`, `DRONES` and `RESCUE` in `src/data/tuning.
   - 60% leave 1–2 scrap (decided at world generation; the drop has id `<drone id>-drop`).
   - Hovering is shown by a bobbing ground shadow; the sprite never scales or rotates, to stay on the pixel grid.
 - **Hull:** 100. Drone contact does 10 damage, then the tank is invulnerable (blinking) for 0.6 s, so a pack can't stack hits. Screen shake and a brief red flash.
-- **Rescue:** at 0 hull the tank is returned to the ship, fully repaired and refueled, losing 25% of each carried resource (rounded down). Chasing drones go home. Running out of fuel triggers the same rescue (M4).
+- **Rescue:** at 0 hull the tank is returned to the ship, fully repaired and refueled, losing 25% of each carried resource (rounded down). Chasing drones go home. (Until v0.5, running out of fuel also triggered a rescue; see "Hybrid drive".)
 
 ## Expedition loop (M4)
 
 Numbers live in `FUEL`, `WORKSHOP` and `SAVE` in `src/data/tuning.ts`.
 
-- **Fuel:** 100. Burns 1 unit per second at full speed, scaled by speed, nothing while stopped. That's about 100 s of full-throttle driving; the map edge is ~6 s from the ship. The HUD bar turns red and blinks below 20%. At 0 the tank is rescued.
+- **Fuel:** 100. Burns 1 unit per second at full speed, scaled by speed, nothing while stopped. That's about 100 s of full-throttle driving; the map edge is ~6 s from the ship. The HUD bar turns red and blinks below 20%. *(v0.5: fuel now feeds a generator that charges the drive battery; see "Hybrid drive".)*
 - **Workshop:** *(v0.4: it's the menu inside the ship; see below.)* Originally: within 130 px of the ship's center, press E. The tank stops while it's open; keys 1/2/3 or clicking a row run an action, E or Esc closes it. Unavailable actions are dimmed and pressing them says why.
   - Refuel: free.
   - Repair: 3 scrap for +25 hull, capped at max.
@@ -179,4 +179,34 @@ Geometry and timings in `SHIP` (`src/data/tuning.ts`). Pure door and footprint l
   - Burrowers never surface within 70 px of the doorway or under the ship.
 - **Wreck dressing:** scorch marks under the ship and a wisp of smoke from the right engine.
 - **UI buttons (fix):** Phaser hit-tests a container as if its contents were centred on it, but the kit's buttons draw from their top-left. Every button's click area was therefore shifted up and left by half its size, which you notice most with display scaling. The hit rectangle is now offset by half a size, and a browser test clicks near all four corners of a card at 1× and 1.25× display scaling.
+
+## Hybrid drive (v0.5)
+
+Numbers in `BATTERY` (`src/data/tuning.ts`). Pure logic in `src/systems/power.ts`, unit tested in `tests/fuel.test.ts`.
+
+- **How it works:**
+  - The motor runs off a 20-unit battery, which drains 1 unit per second at full speed (scaled by speed, nothing at rest).
+  - A fuel generator tops the battery up at up to 2 units per second, burning fuel 1:1. So while there's fuel the battery stays full, and fuel lasts exactly as long as it always did.
+  - Parked with a full battery burns nothing.
+- **Running dry:**
+  - Once the fuel is gone, the battery is all that's left: about 20 s of full-throttle driving, roughly 3,200 px at base speed.
+  - At 0 the tank stops where it is. There's no rescue any more; it's **stranded**.
+- **Solar panels:**
+  - F, only while stopped and outside the ship, slides two PixelLab panels out from under the tank, one each side (0.7 s).
+  - Once fully out they charge 0.5 units per second, so a flat battery fills in about 40 s. The turret still turns and fires.
+  - Driving folds them away again, but only once the battery holds 10%. Below that they stay out and the HUD says "drive at 10%", so the tank can't trap itself folding and unfolding. F folds them at any time.
+  - The charge time is play time: it stops while paused.
+- **Refills:** in the ship the battery charges off the ship (full while inside). A rescue (after being destroyed) refills fuel and battery.
+- **HUD:**
+  - A third bar (teal, battery icon). It turns red below 25% and blinks while running on the battery alone.
+  - Warnings, most important first:
+    1. "Solar charging · N%" (in teal)
+    2. "Battery flat · [F] deploy solar panels"
+    3. "Fuel empty · battery N%"
+    4. "Low fuel"
+    5. "Hull critical"
+  - F is in the pause screen's controls list.
+- **Saves:** the battery is stored with the tank (an optional field, so v0.4 saves load with it full). Fuel and battery may load at 0, so a tank saved stranded loads stranded.
+- **Not tuned to today's map:** fuel and battery are sized for a much bigger world later. On today's map one battery reaches the ship from anywhere.
+- **Pressing E by the door while stranded** still takes the tank in: the ship pulls it in.
 

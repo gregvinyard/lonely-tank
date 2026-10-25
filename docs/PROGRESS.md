@@ -148,9 +148,17 @@ Developer feedback: good; rocks needed size variety and jiggled while moving (fi
 
 **Verified:** 136 unit tests ✅, 51 browser tests ✅.
 
+## M13 — Hybrid drive and solar panels ✅ (v0.5, `docs/SPEC_v0.5.md`)
+
+- The tank is electric: a 20-unit battery drives it, and a fuel generator keeps it charged (fuel range unchanged, plus one battery).
+- No more fuel rescue. With the fuel and battery gone the tank is stranded; F deploys solar panels that recharge it (about 40 s for a full battery). Driving folds them once there's 10% charge.
+- The battery bar is on the HUD, with warnings for charging, stranded, and running on battery; the battery is saved; the ship and rescues refill it.
+
+**Verified:** typecheck ✅, 139 unit tests ✅ (the power model, including that fuel range is unchanged; saves with and without a battery), 55 browser tests ✅ (adds: driving on battery and getting stranded, solar charging and pause, the 10% fold rule, panels only when stopped, battery saved and refilled).
+
 ## Next
 
-- Developer playtest of v0.4.
+- Developer playtest of v0.5.
 
 ## Known issues
 

@@ -6,7 +6,7 @@ import { FRAMES } from '../data/uiKit';
 // top-left on whole pixels so it stays on the game's pixel grid; widgets that
 // need centering do it with Math.round, never with a 0.5 origin.
 
-export const UI_TEXT = { text: 0xf3e3c3, dim: 0xc99668, accent: 0x3fb8a8, danger: 0xe6463c, good: 0x7ec850, fuel: 0xf6a04a } as const;
+export const UI_TEXT = { text: 0xf3e3c3, dim: 0xc99668, accent: 0x3fb8a8, danger: 0xe6463c, good: 0x7ec850, fuel: 0xf6a04a, battery: 0x7fe0d2 } as const;
 
 const SLICE: Record<string, number> = Object.fromEntries(FRAMES.map((f) => [f.key, f.slice]));
 

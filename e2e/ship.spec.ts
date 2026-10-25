@@ -123,6 +123,8 @@ test('an old save with the tank parked where the ship now is loads it outside', 
     `(() => { const s = ${SCENE}; return { x: s.tank.x, y: s.tank.y, spawn: s.world.spawn, hull: s.hull }; })()`,
   );
   expect(r.hull).toBe(80);
+  // Saved before the hybrid drive: the battery starts full.
+  expect(await read<number>(page, `${SCENE}.battery`)).toBe(20);
   expect(Math.hypot(r.x - r.spawn.x, r.y - r.spawn.y)).toBeLessThan(2);
   await page.locator('canvas').click({ position: { x: 5, y: 5 } });
   await page.keyboard.down('d');

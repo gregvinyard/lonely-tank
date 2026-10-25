@@ -111,7 +111,9 @@ describe('save', () => {
   });
 
   it('clamps tank values into range', () => {
-    expect(clampTank({ x: -50, y: 5000, hull: 0, fuel: 150 }, 125, 100, 2048, 20)).toEqual({ x: 20, y: 2028, hull: 1, fuel: 100 });
-    expect(clampTank({ x: 500, y: 600, hull: 200, fuel: -3 }, 100, 100, 2048, 20)).toEqual({ x: 500, y: 600, hull: 100, fuel: 1 });
+    expect(clampTank({ x: -50, y: 5000, hull: 0, fuel: 150, battery: 30 }, 125, 100, 2048, 20, 20)).toEqual({ x: 20, y: 2028, hull: 1, fuel: 100, battery: 20 });
+    expect(clampTank({ x: 500, y: 600, hull: 200, fuel: -3, battery: -1 }, 100, 100, 2048, 20, 20)).toEqual({ x: 500, y: 600, hull: 100, fuel: 0, battery: 0 });
+    // Saved before the hybrid drive: the battery starts full.
+    expect(clampTank({ x: 500, y: 600, hull: 50, fuel: 10 }, 100, 100, 2048, 20, 20).battery).toBe(20);
   });
 });

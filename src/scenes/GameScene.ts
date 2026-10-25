@@ -1,5 +1,6 @@
 import * as Phaser from 'phaser';
 import {
+  BATTERY,
   BURROWERS,
   CAMERA,
   CANNON,
@@ -27,7 +28,7 @@ import type { BurrowEvent } from '../systems/burrower';
 import { Tank } from '../entities/Tank';
 import { keyOnce } from '../input/keyOnce';
 import { applyDamage, canFire, rescuePenalty } from '../systems/combat';
-import { burnFuel } from '../systems/fuel';
+import { stepPower, stranded } from '../systems/power';
 import { addResource, createInventory, type Inventory } from '../systems/inventory';
 import { nearestInRange, type ResourceKind, type ResourceNode } from '../systems/resources';
 import { SAVE_VERSION, browserStorage, clampTank, clearSave, hasSave, loadSave, writeSave, type SaveData, type SavedDrop } from '../systems/save';
@@ -38,7 +39,10 @@ import { atDoorway, doorMouth, doorTarget, entryPath, hullAt, inFrontOfDoor, ove
 import type { Circle } from '../systems/steer';
 import { generateWorld, type World } from '../systems/worldgen';
 
-type Keys = Record<'up' | 'down' | 'left' | 'right' | 'interact' | 'one' | 'two', Phaser.Input.Keyboard.Key>;
+type Keys = Record<'up' | 'down' | 'left' | 'right' | 'interact' | 'one' | 'two' | 'solar', Phaser.Input.Keyboard.Key>;
+
+/** Solar panels: folded away under the tank, sliding out, out and charging, or sliding back in. */
+export type SolarState = 'stowed' | 'deploying' | 'out' | 'folding';
 
 /** Longest frame counted toward play time, so a tab coming back from the background doesn't jump the clock. */
 const MAX_FRAME_MS = 250;
@@ -53,7 +57,7 @@ export interface CollectedPayload {
 
 /** Emitted on game.events when the tank is returned to the ship. */
 export const RESCUED_EVENT = 'tank-rescued';
-export type RescueReason = 'destroyed' | 'fuel';
+export type RescueReason = 'destroyed';
 export interface RescuedPayload {
   reason: RescueReason;
   lost: Inventory;
@@ -78,6 +82,11 @@ export class GameScene extends Phaser.Scene {
   stats: TankStats = computeStats(this.levels);
   hull = this.stats.maxHull;
   fuel = this.stats.maxFuel;
+  /** The drive battery; the motor runs off it and the fuel generator keeps it charged. */
+  battery: number = BATTERY.max;
+  solarState: SolarState = 'stowed';
+  /** How far the solar panels are out, 0 (folded) to 1 (fully out). */
+  solarOut = 0;
   /** Milliseconds of unpaused play; drives respawns. */
   playTimeMs = 0;
   /** Uncollected resource nodes by stable id. */
@@ -117,6 +126,8 @@ export class GameScene extends Phaser.Scene {
   private menuShown = false;
   /** Leaving: the tank has started rolling out of the open door. */
   private rollingOut = false;
+  /** The two solar panels, either side of the tank. */
+  private panels: Phaser.GameObjects.Image[] = [];
   /** Rocks and the ship, grown by a drone's radius, for steering. */
   private droneObstacles: Circle[] = [];
   /** Rock collision circles, for burrowers (which pass under them). */
@@ -141,6 +152,15 @@ export class GameScene extends Phaser.Scene {
     return this.stats.maxFuel;
   }
 
+  get maxBattery() {
+    return BATTERY.max;
+  }
+
+  /** Out of fuel and charge: it can't move until the solar panels recharge it. */
+  get stranded() {
+    return stranded({ fuel: this.fuel, battery: this.battery });
+  }
+
   create() {
     const save = this.readSave();
     this.world = generateWorld(save?.seed ?? WORLD_SEED);
@@ -150,6 +170,9 @@ export class GameScene extends Phaser.Scene {
     this.playTimeMs = save?.playTimeMs ?? 0;
     this.hull = this.maxHull;
     this.fuel = this.maxFuel;
+    this.battery = this.maxBattery;
+    this.solarState = 'stowed';
+    this.solarOut = 0;
     this.resources.clear();
     this.drones.clear();
     this.burrowers.clear();
@@ -230,7 +253,8 @@ export class GameScene extends Phaser.Scene {
 
     let start = { x: this.world.spawn.x, y: this.world.spawn.y };
     if (save) {
-      const t = clampTank(save.tank, this.maxHull, this.maxFuel, WORLD_SIZE, TANK.bodyRadius);
+      const t = clampTank(save.tank, this.maxHull, this.maxFuel, WORLD_SIZE, TANK.bodyRadius, this.maxBattery);
+      this.battery = t.battery;
       // Older saves often parked the tank where the (now much bigger) ship is.
       const onShip = overHull({ x: t.x - center.x, y: t.y - center.y }, SHIP.layout, TANK.bodyRadius + 2);
       if (!onShip) start = { x: t.x, y: t.y };
@@ -238,8 +262,13 @@ export class GameScene extends Phaser.Scene {
       this.fuel = t.fuel;
     }
     this.tank = new Tank(this, start.x, start.y);
-    // Teleporting the tank (rescue, tests) cancels any trip through the door.
-    this.tank.onReset = () => this.leaveShipNow();
+    // Solar panels tuck under the tank (drawn below the hull) and slide out sideways.
+    this.panels = [0, 1].map((i) => this.add.image(0, 0, 'solar_panel').setFlipY(i === 1).setDepth(9.5).setVisible(false));
+    // Teleporting the tank (rescue, tests) cancels any trip through the door and folds the panels.
+    this.tank.onReset = () => {
+      this.leaveShipNow();
+      this.foldSolarNow();
+    };
     this.physics.add.collider(this.tank.hull, solids);
 
     this.rockCircles = this.world.rocks.map((r) => ({ x: r.x, y: r.y, r: OBSTACLES.sizes[r.size].radius }));
@@ -273,10 +302,12 @@ export class GameScene extends Phaser.Scene {
       interact: 'E',
       one: 'ONE',
       two: 'TWO',
+      solar: 'F',
     }) as Keys;
     this.keys.interact.on('down', keyOnce(() => this.interact()));
     this.keys.one.on('down', keyOnce(() => this.workshopOpen && this.workshopService('refuel')));
     this.keys.two.on('down', keyOnce(() => this.workshopOpen && this.workshopService('repair')));
+    this.keys.solar.on('down', keyOnce(() => this.toggleSolar()));
 
     this.time.addEvent({ delay: RESPAWN.checkMs, loop: true, callback: () => this.respawn() });
 
@@ -305,12 +336,15 @@ export class GameScene extends Phaser.Scene {
   update(time: number, delta: number) {
     const k = this.keys;
     // The tank holds still while the workshop is open.
-    const input = this.workshopOpen
+    const wanted = this.workshopOpen
       ? { x: 0, y: 0 }
       : {
           x: (k.right.isDown ? 1 : 0) - (k.left.isDown ? 1 : 0),
           y: (k.down.isDown ? 1 : 0) - (k.up.isDown ? 1 : 0),
         };
+    // Driving takes charge and the panels put away.
+    this.updateSolar(delta, wanted.x !== 0 || wanted.y !== 0);
+    const input = this.battery > 0 && this.solarState === 'stowed' ? wanted : { x: 0, y: 0 };
 
     // Recompute the pointer's world position every frame: the camera moves
     // even when the mouse doesn't.
@@ -333,11 +367,23 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.setLerp(l, l);
     this.emitDust(delta);
 
-    this.fuel = burnFuel(this.fuel, this.tank.speed, st.maxSpeed, delta, FUEL.perSecond);
+    const power = stepPower(
+      { fuel: this.fuel, battery: this.battery },
+      {
+        throttle: outside ? this.tank.speed / st.maxSpeed : 0,
+        solar: this.solarState === 'out',
+        dtMs: delta,
+        maxFuel: this.maxFuel,
+        maxBattery: this.maxBattery,
+      },
+      BATTERY,
+    );
+    this.fuel = power.fuel;
+    // In the ship, it charges off the ship.
+    this.battery = this.inShip ? this.maxBattery : power.battery;
     const lowFuel = this.fuel / this.maxFuel <= FUEL.lowFraction;
     if (lowFuel && !this.fuelWarned) sfx.play('lowFuel');
     this.fuelWarned = lowFuel;
-    if (this.fuel <= 0) this.rescue('fuel');
     this.emitSmoke(delta);
     this.fieldRepair(time, delta);
 
@@ -405,9 +451,58 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** F: put the solar panels out (only when stopped, out in the open), or away again. */
+  toggleSolar() {
+    if (this.solarState === 'out' || this.solarState === 'deploying') {
+      this.solarState = 'folding';
+      sfx.play('solar');
+      return;
+    }
+    if (this.shipState !== 'outside' || this.workshopOpen || this.tank.speed > 5) return;
+    this.solarState = 'deploying';
+    sfx.play('solar');
+  }
+
+  /** Slides the panels in or out, and puts them away when the player drives off with enough charge. */
+  private updateSolar(delta: number, wantsToDrive: boolean) {
+    if (this.solarState === 'out' && wantsToDrive && this.battery >= BATTERY.foldAt * this.maxBattery) {
+      this.solarState = 'folding';
+      sfx.play('solar');
+    }
+    const step = delta / BATTERY.deployMs;
+    if (this.solarState === 'deploying') {
+      this.solarOut = Math.min(1, this.solarOut + step);
+      if (this.solarOut === 1) this.solarState = 'out';
+    } else if (this.solarState === 'folding') {
+      this.solarOut = Math.max(0, this.solarOut - step);
+      if (this.solarOut === 0) this.solarState = 'stowed';
+    }
+    this.placePanels();
+  }
+
+  /** Puts the panels either side of the hull, as far out as they've slid, on whole pixels. */
+  private placePanels() {
+    const reach = Math.round(this.solarOut * PANEL_REACH);
+    const r = this.tank.hull.rotation;
+    this.panels.forEach((p, i) => {
+      const side = i === 0 ? -1 : 1;
+      // Out along the tank's own sideways axis.
+      p.setVisible(reach > 0)
+        .setRotation(r)
+        .setPosition(this.tank.x - Math.round(Math.sin(r) * side * reach), this.tank.y + Math.round(Math.cos(r) * side * reach));
+    });
+  }
+
+  private foldSolarNow() {
+    this.solarState = 'stowed';
+    this.solarOut = 0;
+    this.placePanels();
+  }
+
   /** Rolls the tank in through the cargo door; the ship menu opens once it's inside. */
   enterShip() {
     if (this.shipState !== 'outside') return;
+    this.foldSolarNow();
     const c = this.world.center;
     this.shipState = 'entering';
     this.tankBody.setVelocity(0, 0);
@@ -613,7 +708,12 @@ export class GameScene extends Phaser.Scene {
       version: SAVE_VERSION,
       seed: this.world.seed,
       playTimeMs: Math.round(this.playTimeMs),
-      tank: { ...(this.inShip ? this.world.spawn : { x: this.tank.x, y: this.tank.y }), hull: this.hull, fuel: this.fuel },
+      tank: {
+        ...(this.inShip ? this.world.spawn : { x: this.tank.x, y: this.tank.y }),
+        hull: this.hull,
+        fuel: this.fuel,
+        battery: this.battery,
+      },
       inventory: this.inventory,
       collected: events(this.collected),
       destroyed: events(this.destroyed),
@@ -824,6 +924,7 @@ export class GameScene extends Phaser.Scene {
     this.inventory = inventory;
     this.hull = this.maxHull;
     this.fuel = this.maxFuel;
+    this.battery = this.maxBattery;
     this.invulnUntil = this.time.now + 1500;
 
     const { spawn } = this.world;
@@ -885,6 +986,9 @@ function setCircleBody(img: Phaser.Physics.Arcade.Image, radius: number) {
   // setOffset does move it, so apply the offset separately.
   body.setCircle(radius).setOffset(img.width / 2 - radius, img.height / 2 - radius);
 }
+
+/** How far each solar panel's center slides out from the tank's center. */
+const PANEL_REACH = 30;
 
 /** One stretch of a scripted drive through the ship's door. */
 interface DriveLeg {

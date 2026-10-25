@@ -192,8 +192,21 @@ export const RESCUE = {
 
 export const FUEL = {
   max: 100,
-  perSecond: 1, // burned at full speed; scales with speed, nothing while stopped
   lowFraction: 0.2, // HUD warns below this
+} as const;
+
+// Hybrid drive (v0.5): the motor runs off the battery; a fuel generator keeps
+// it charged (1 fuel = 1 charge), so fuel range is what it always was, plus
+// one battery. With the fuel gone, solar panels slowly recharge a parked tank.
+// Sized for a much bigger world later: don't tune these to today's map.
+export const BATTERY = {
+  max: 20, // ~20 s of full-throttle driving, ~3200 px at base speed
+  drainPerSec: 1, // at full speed; scales with speed, nothing while stopped
+  generatorPerSec: 2, // most the generator charges per second (outpaces the drain)
+  solarPerSec: 0.5, // a flat battery fills in ~40 s of sun
+  deployMs: 700, // panels sliding out or folding away
+  foldAt: 0.1, // a drive key only folds the panels once the battery holds this fraction
+  lowFraction: 0.25, // HUD warns below this while running on battery alone
 } as const;
 
 export const WORKSHOP = {

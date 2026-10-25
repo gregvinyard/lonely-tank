@@ -1,7 +1,7 @@
 import * as Phaser from 'phaser';
 import { sfx } from '../audio/sfx';
 import { keyOnce } from '../input/keyOnce';
-import { FUEL, HULL } from '../data/tuning';
+import { BATTERY, FUEL, HULL } from '../data/tuning';
 import { upgradeDef } from '../data/upgrades';
 import { compassPlacement } from '../systems/compass';
 import type { Inventory } from '../systems/inventory';
@@ -25,7 +25,7 @@ const COLOR = { ...UI_TEXT, hull: UI_TEXT.good } as const;
 const BAR_W = 48;
 const LABELS: Record<ResourceKind, string> = { scrap: 'Scrap', crystal: 'Crystal', circuit: 'Circuit' };
 const KIND_COLOR: Record<ResourceKind, number> = { scrap: 0xc9cdd2, crystal: 0xc9a6f2, circuit: 0x7ec850 };
-const PANEL_H = 84;
+const PANEL_H = 96;
 const HINT_MS = 45000; // the short controls hint fades after this; the pause screen lists them all
 const CONTROLS: [string, string][] = [
   ['WASD', 'Drive'],
@@ -33,6 +33,7 @@ const CONTROLS: [string, string][] = [
   ['Left click', 'Fire (hold)'],
   ['E', 'Salvage / enter ship'],
   ['E / Esc', 'Leave ship'],
+  ['F', 'Solar panels (stopped)'],
   ['1 / 2', 'Refuel / repair'],
   ['Space', 'Build upgrade'],
   ['M', 'Sound on/off'],
@@ -49,6 +50,7 @@ export class HudScene extends Phaser.Scene {
   private panel!: Phaser.GameObjects.NineSlice;
   private hullBar!: Bar;
   private fuelBar!: Bar;
+  batteryBar!: Bar;
   private shownHull = -1;
   private goal!: Plate;
   /** Goal ladder rung last shown, to celebrate climbing it. */
@@ -167,11 +169,12 @@ export class HudScene extends Phaser.Scene {
     this.panel = frame(this, 'ui_panel', 4, 4, 96, PANEL_H);
     this.hullBar = new Bar(this, 10, 11, 'icon_hull', BAR_W, HULL.max);
     this.fuelBar = new Bar(this, 10, 23, 'icon_fuel', BAR_W, FUEL.max);
+    this.batteryBar = new Bar(this, 10, 35, 'icon_battery', BAR_W, BATTERY.max);
     // Half-size item icons: a 2:1 nearest downscale keeps them on the grid.
     this.counts = {} as Record<ResourceKind, Phaser.GameObjects.BitmapText>;
     RESOURCE_KINDS.forEach((k, i) => {
-      this.add.image(9, 34 + i * 16, RESOURCE_ICON[k]).setOrigin(0, 0).setScale(0.5);
-      this.counts[k] = label(this, 28, 39 + i * 16, '');
+      this.add.image(9, 46 + i * 16, RESOURCE_ICON[k]).setOrigin(0, 0).setScale(0.5);
+      this.counts[k] = label(this, 28, 51 + i * 16, '');
     });
     this.setCounts(this.game_.inventory);
   }
@@ -185,10 +188,15 @@ export class HudScene extends Phaser.Scene {
     // The low-fuel bar blinks so it's noticed mid-fight.
     const blinkOff = lowFuel && Math.floor(this.time.now / 300) % 2 === 0;
     this.fuelBar.setValue(g.fuel, g.maxFuel, blinkOff ? 0x5a2a20 : lowFuel ? COLOR.danger : COLOR.fuel);
+    // The battery only runs down once the fuel's gone; then it blinks when low.
+    const lowBattery = g.battery / g.maxBattery <= BATTERY.lowFraction;
+    const batteryBlink = lowBattery && g.fuel <= 0 && g.solarState === 'stowed' && Math.floor(this.time.now / 300) % 2 === 0;
+    this.batteryBar.setValue(g.battery, g.maxBattery, batteryBlink ? 0x1c3a36 : lowBattery ? COLOR.danger : COLOR.battery);
     // The stats panel grows with the longest bar or count.
     const right = Math.max(
       this.hullBar.x + this.hullBar.width,
       this.fuelBar.x + this.fuelBar.width,
+      this.batteryBar.x + this.batteryBar.width,
       ...Object.values(this.counts).map((t) => t.x + Math.round(t.width)),
     );
     this.panel.setSize(right + 7 - this.panel.x, PANEL_H);
@@ -246,15 +254,27 @@ export class HudScene extends Phaser.Scene {
   private updateWarning(width: number) {
     const g = this.game_;
     let s = '';
+    let tint: number = COLOR.danger;
     if (!g.inShip) {
-      if (g.fuel / g.maxFuel <= FUEL.lowFraction) s = 'Low fuel · return to ship';
+      const charge = Math.floor((g.battery / g.maxBattery) * 100);
+      if (g.solarState !== 'stowed') {
+        tint = COLOR.accent;
+        const ready = g.battery >= BATTERY.foldAt * g.maxBattery;
+        s = g.solarState === 'out' ? `Solar charging · ${charge}%${ready ? '' : ` · drive at ${BATTERY.foldAt * 100}%`}` : 'Solar panels';
+      } else if (g.stranded) s = 'Battery flat · [F] deploy solar panels';
+      else if (g.fuel <= 0) s = `Fuel empty · battery ${charge}%`;
+      else if (g.fuel / g.maxFuel <= FUEL.lowFraction) s = 'Low fuel · return to ship';
       else if (g.hull / g.maxHull <= 0.3) s = 'Hull critical · repair at ship';
     }
     this.warning.setVisible(!!s);
     if (!s) return;
-    if (this.warning.text.text !== s.toUpperCase()) this.warning.setLabel(s);
+    this.warning.setIcon(tint === COLOR.danger ? 'icon_warn' : 'icon_battery');
+    if (this.warning.text.text !== s.toUpperCase() || this.warningTint !== tint) this.warning.setLabel(s, tint);
+    this.warningTint = tint;
     centerOn(this.warning, width / 2, 12);
   }
+
+  private warningTint: number = COLOR.danger;
 
   showToast(message: string, icon?: string, ms = 1500) {
     this.toast.setIcon(icon);
@@ -356,7 +376,7 @@ export class HudScene extends Phaser.Scene {
 
   private onRescued({ reason, lost }: RescuedPayload) {
     this.setCounts(this.game_.inventory);
-    const why = reason === 'fuel' ? 'Out of fuel' : 'Tank disabled';
+    const why = reason === 'destroyed' ? 'Tank disabled' : 'Rescued';
     const parts = RESOURCE_KINDS.filter((k) => lost[k] > 0).map((k) => `${lost[k]} ${k}`);
     this.showBanner(`${why} · rescued to ship\n${parts.length ? `Lost ${parts.join(', ')}` : 'No salvage lost'}`, COLOR.danger, 'icon_warn');
   }

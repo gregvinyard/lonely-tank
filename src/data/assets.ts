@@ -124,6 +124,19 @@ export const ASSETS: AssetDef[] = [
     },
   },
   {
+    // One solar panel, hinge along its bottom edge (toward the tank). The
+    // tank slides one out each side; the other is flipped.
+    key: 'solar_panel',
+    file: 'assets/solar_panel.png',
+    width: 30,
+    height: 25,
+    placeholder: (g) => {
+      g.fillStyle(0x0d0b10).fillRect(0, 0, 30, 23);
+      g.fillStyle(0x1c2a5c).fillRect(1, 1, 28, 21);
+      g.fillStyle(0x6f7378).fillRect(11, 23, 8, 2);
+    },
+  },
+  {
     // Cargo door shutter, 55x45, drawn over the bay opening; slides up to open.
     key: 'ship_door',
     file: 'assets/ship_door.png',

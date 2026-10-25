@@ -27,7 +27,8 @@ export interface SaveData {
   seed: number;
   /** Milliseconds of unpaused play. */
   playTimeMs: number;
-  tank: { x: number; y: number; hull: number; fuel: number };
+  /** `battery` came with the hybrid drive (v0.5); older saves load with a full one. */
+  tank: { x: number; y: number; hull: number; fuel: number; battery?: number };
   inventory: Inventory;
   /** Collected resource nodes, including drone drops. */
   collected: SavedEvent[];
@@ -100,6 +101,7 @@ export function parseSave(raw: string): SaveData | undefined {
   const { seed, playTimeMs, tank, inventory, collected, destroyed, drops, upgrades } = d;
   if (!Number.isInteger(seed) || !isNum(playTimeMs) || playTimeMs < 0) return undefined;
   if (!isObj(tank) || ![tank.x, tank.y, tank.hull, tank.fuel].every(isNum)) return undefined;
+  if (tank.battery !== undefined && !isNum(tank.battery)) return undefined;
   if (!isObj(inventory) || ![inventory.scrap, inventory.crystal, inventory.circuit].every(isCount)) return undefined;
   if (!isEvents(collected) || !isEvents(destroyed)) return undefined;
   if (!Array.isArray(drops) || !drops.every(isDrop)) return undefined;
@@ -117,7 +119,13 @@ export function parseSave(raw: string): SaveData | undefined {
     version: SAVE_VERSION,
     seed: seed as number,
     playTimeMs,
-    tank: { x: tank.x as number, y: tank.y as number, hull: tank.hull as number, fuel: tank.fuel as number },
+    tank: {
+      x: tank.x as number,
+      y: tank.y as number,
+      hull: tank.hull as number,
+      fuel: tank.fuel as number,
+      ...(tank.battery === undefined ? {} : { battery: tank.battery as number }),
+    },
     inventory: { scrap: inventory.scrap as number, crystal: inventory.crystal as number, circuit: inventory.circuit as number },
     collected: collected.map(({ id, at }) => ({ id, at })),
     destroyed: destroyed.map(({ id, at }) => ({ id, at })),
@@ -175,13 +183,25 @@ function isDrop(v: unknown): v is SavedDrop {
   );
 }
 
-/** Brings saved tank values into range: inside the world, hull 1..max, fuel 1..max (an empty tank would trigger a rescue on load). */
-export function clampTank(t: SaveData['tank'], maxHull: number, maxFuel: number, worldSize: number, margin: number): SaveData['tank'] {
+/**
+ * Brings saved tank values into range: inside the world, hull 1..max, fuel and
+ * battery 0..max (a tank saved stranded loads stranded). A save from before
+ * the battery existed loads with it full.
+ */
+export function clampTank(
+  t: SaveData['tank'],
+  maxHull: number,
+  maxFuel: number,
+  worldSize: number,
+  margin: number,
+  maxBattery: number,
+): Required<SaveData['tank']> {
   const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
   return {
     x: clamp(t.x, margin, worldSize - margin),
     y: clamp(t.y, margin, worldSize - margin),
     hull: clamp(Math.round(t.hull), 1, maxHull),
-    fuel: clamp(t.fuel, 1, maxFuel),
+    fuel: clamp(t.fuel, 0, maxFuel),
+    battery: clamp(t.battery ?? maxBattery, 0, maxBattery),
   };
 }

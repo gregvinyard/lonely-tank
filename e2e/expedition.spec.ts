@@ -29,24 +29,3 @@ test('fuel burns while driving and not while parked', async ({ page }) => {
   expect(await read<number>(page, `${HUD}.fuelBar.fill.width`)).toBeLessThanOrEqual(48);
 });
 
-test('running out of fuel rescues the tank to the ship', async ({ page }) => {
-  await start(page);
-  await page.evaluate(`(() => {
-    const s = ${SCENE};
-    s.inventory = { scrap: 4, crystal: 2, circuit: 0 };
-    s.fuel = 0.3;
-    s.tank.reset(s.world.spawn.x, s.world.spawn.y + 300);
-  })()`);
-  await page.keyboard.down('d');
-  await page.waitForFunction(`${HUD}.banner.visible`, null, { timeout: 5000 });
-  await page.keyboard.up('d');
-  const r = await read<{ fuel: number; inventory: object; d: number; text: string }>(
-    page,
-    `(() => { const s = ${SCENE}; return { fuel: s.fuel, inventory: s.inventory, d: Math.hypot(s.tank.x - s.world.spawn.x, s.tank.y - s.world.spawn.y), text: ${HUD}.bannerText.text }; })()`,
-  );
-  expect(r.fuel).toBeGreaterThan(99);
-  expect(r.inventory).toEqual({ scrap: 3, crystal: 2, circuit: 0 });
-  expect(r.d).toBeLessThan(10);
-  expect(r.text).toContain('OUT OF FUEL');
-});
-

@@ -145,6 +145,21 @@ export const ICONS: IconDef[] = [
     ],
   },
   {
+    // Battery cell with a charge bolt.
+    key: 'icon_battery',
+    rows: [
+      '...kkk...',
+      '.kkkkkkk.',
+      '.ksssssk.',
+      '.ksTTssk.',
+      '.ksTTTsk.',
+      '.kssTTsk.',
+      '.ksssTsk.',
+      '.ksssssk.',
+      '.kkkkkkk.',
+    ],
+  },
+  {
     // Drop = fuel.
     key: 'icon_fuel',
     rows: [
