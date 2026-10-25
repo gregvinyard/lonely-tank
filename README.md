@@ -32,7 +32,8 @@ npm run dev        # dev server at http://localhost:5173
 | Mouse | Aim turret |
 | Left mouse | Fire cannon (hold to keep firing) |
 | E | Salvage a nearby resource, or open/close the workshop at the ship |
-| 1 / 2 / 3 | Workshop: refuel / repair / craft plating (or click the row) |
+| 1 / 2 | Workshop: refuel / repair |
+| Arrows or WASD, Space | Workshop: choose an upgrade, build it (or click a card, then Build) |
 | Esc / P | Pause (shows all controls); with the workshop open, Esc closes it |
 | M | Sound on/off |
 

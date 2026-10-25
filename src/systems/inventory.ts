@@ -3,7 +3,7 @@ import type { ResourceKind } from './resources';
 export type Inventory = Record<ResourceKind, number>;
 
 export function createInventory(): Inventory {
-  return { scrap: 0, crystal: 0 };
+  return { scrap: 0, crystal: 0, circuit: 0 };
 }
 
 export function addResource(inv: Inventory, kind: ResourceKind, amount: number): Inventory {

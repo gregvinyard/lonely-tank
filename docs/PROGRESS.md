@@ -85,9 +85,20 @@ Developer feedback: good; rocks needed size variety and jiggled while moving (fi
 
 **Verified:** typecheck ✅, 88 unit tests ✅, 25 browser tests ✅ (adds: every HUD widget on whole pixels).
 
+## M7 — Upgrade tree and workshop screen ✅
+
+- 8 upgrade lines (22 tiers) as data, one stats module applying all effects, requirements between lines.
+- Workshop screen: services, card grid with tier pips, detail pane with costs, Build button; mouse and keyboard.
+- Circuits (pulled in from M8): every drone drops one; costs and HUD use them.
+- Goal ladder replaces the single plating objective.
+- Save v2 with migration from v0.1 saves.
+- PixelLab art: 8 upgrade icons, circuit pickup.
+
+**Verified:** typecheck ✅, 97 unit tests ✅, 30 browser tests ✅ (adds: services, keyboard and mouse building, locked lines, measurable effects, field repair, reload with upgrades/circuits/drops, v0.1 save migration).
+
 ## Next
 
-- M7 — Upgrade tree and workshop screen.
+- M8 — Economy: respawning salvage and drones, distance-scaled amounts.
 
 ## Known issues
 

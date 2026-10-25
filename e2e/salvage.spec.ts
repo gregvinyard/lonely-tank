@@ -24,7 +24,7 @@ test.beforeEach(async ({ page }) => {
 
 test('driving onto a resource and pressing E salvages it', async ({ page }) => {
   const start = await state(page);
-  expect(start.inventory).toEqual({ scrap: 0, crystal: 0 });
+  expect(start.inventory).toEqual({ scrap: 0, crystal: 0, circuit: 0 });
   // At the ship the only prompt is the workshop.
   expect(start.prompt).toBe('[E] OPEN WORKSHOP');
 
@@ -62,7 +62,7 @@ test('pressing E away from the ship with nothing nearby does nothing', async ({ 
   await page.keyboard.press('e');
   await page.waitForTimeout(50);
   const s = await state(page);
-  expect(s.inventory).toEqual({ scrap: 0, crystal: 0 });
+  expect(s.inventory).toEqual({ scrap: 0, crystal: 0, circuit: 0 });
   expect(await page.evaluate(`${SCENE}.workshopOpen`)).toBe(false);
 });
 

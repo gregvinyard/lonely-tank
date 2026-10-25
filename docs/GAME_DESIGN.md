@@ -108,6 +108,16 @@ Numbers live in `FUEL`, `WORKSHOP` and `SAVE` in `src/data/tuning.ts`.
 - Widgets in `src/ui/widgets.ts`: `Plate` (self-sizing text plate with optional icon), `Bar` (icon + track + fill; length grows with the maximum), `Button` (hover/focus/disabled states, mouse). All laid out from the top-left on whole pixels; a browser test walks the HUD and fails on any fractional position.
 - The compass stays above the prompt and hint plates; banners sit under the goal plate, or under the workshop while it's open.
 
+## Upgrades (v0.2 M7)
+
+- Data in `src/data/upgrades.ts` (8 lines, 22 tiers); every effect is applied in `src/systems/stats.ts` (`computeStats`), which the tank, cannon, fuel, HUD and workshop all read.
+- Effects per tier: plating +25 max hull; fuel tanks +40 max fuel; engine +12% top speed and acceleration; autoloader −15% reload; long barrel +30% shell range; AP shells +1 damage (needs Autoloader 1); scanner T1 marks the nearest salvage (overhead chevron, or an edge arrow coloured by type), T2 adds type and distance; field repair kit 0.5 / 1.5 hull per second while stopped and not hit for 5 s (needs Plating 1).
+- New hull/fuel capacity arrives filled. Costs rise per tier; later tiers need circuits.
+- **Circuits:** every destroyed drone drops one (id `<drone>-chip`) beside its chance of scrap. Rescue loses 25% of circuits too.
+- **Goal ladder:** first upgrade → tier 2 in any line → 6 tiers → 3 lines maxed → everything (22) → "Fully upgraded · explore freely".
+- **Workshop screen:** services (refuel, repair), a 4×2 grid of cards (icon + tier pips: teal built, amber next when affordable, faded icon when locked), a detail pane (tier, next effect, cost with red numbers when short, requirement) and a Build button.
+- **Save v2:** upgrade levels, circuits, play time, collected/destroyed entries with the play time they happened, drops with their kind. v1 saves are migrated (plating flag → Plating 1; everything collected/destroyed at time 0).
+
 ## Debug
 
 - Add `?debug` to the URL to draw physics bodies.

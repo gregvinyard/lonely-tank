@@ -178,6 +178,33 @@ export const ASSETS: AssetDef[] = [
     },
   },
   {
+    // Circuit board dropped by destroyed drones.
+    key: 'circuit',
+    width: 32,
+    height: 32,
+    file: 'assets/circuit.png',
+    placeholder: (g) => {
+      g.fillStyle(0x0d0b10).fillRect(8, 9, 16, 14);
+      g.fillStyle(0x2f6b3a).fillRect(9, 10, 14, 12);
+      g.fillStyle(0xd8b04a).fillRect(11, 12, 10, 1).fillRect(11, 19, 10, 1);
+      g.fillStyle(0x3fb8a8).fillRect(14, 14, 4, 4);
+    },
+  },
+  // 32x32 upgrade icons for the workshop cards.
+  ...['plating', 'fuel', 'engine', 'autoloader', 'barrel', 'ap', 'scanner', 'repair'].map(
+    (name): AssetDef => ({
+      key: `up_${name}`,
+      width: 32,
+      height: 32,
+      file: `assets/up_${name}.png`,
+      placeholder: (g) => {
+        g.fillStyle(0x0d0b10).fillRect(4, 4, 24, 24);
+        g.fillStyle(0x5f636b).fillRect(5, 5, 22, 22);
+        g.fillStyle(0x3fb8a8).fillRect(12, 12, 8, 8);
+      },
+    }),
+  ),
+  {
     // Soft ground shadow under hovering drones.
     key: 'shadow',
     width: 28,

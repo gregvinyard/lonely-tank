@@ -23,7 +23,7 @@ describe('generateWorld resources', () => {
   it('keeps resources off rocks, apart, in bounds and away from the ship', () => {
     const { resources, rocks, center } = world;
     for (const n of resources) {
-      const opts = RESOURCES[n.kind];
+      const opts = RESOURCES[n.kind as 'scrap' | 'crystal'];
       expect(Math.hypot(n.x - center.x, n.y - center.y)).toBeGreaterThanOrEqual(opts.minDistance);
       expect(Math.hypot(n.x - center.x, n.y - center.y)).toBeGreaterThan(SHIP.safeRadius);
       expect(n.amount).toBeGreaterThanOrEqual(opts.minAmount);

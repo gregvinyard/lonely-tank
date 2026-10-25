@@ -14,13 +14,13 @@ describe('combat rules', () => {
   });
 
   it('rescue loses 25% of each resource, rounded down', () => {
-    expect(rescuePenalty({ scrap: 3, crystal: 1 }, 0.25)).toEqual({
-      inventory: { scrap: 3, crystal: 1 },
-      lost: { scrap: 0, crystal: 0 },
+    expect(rescuePenalty({ scrap: 3, crystal: 1, circuit: 2 }, 0.25)).toEqual({
+      inventory: { scrap: 3, crystal: 1, circuit: 2 },
+      lost: { scrap: 0, crystal: 0, circuit: 0 },
     });
-    expect(rescuePenalty({ scrap: 4, crystal: 9 }, 0.25)).toEqual({
-      inventory: { scrap: 3, crystal: 7 },
-      lost: { scrap: 1, crystal: 2 },
+    expect(rescuePenalty({ scrap: 4, crystal: 9, circuit: 8 }, 0.25)).toEqual({
+      inventory: { scrap: 3, crystal: 7, circuit: 6 },
+      lost: { scrap: 1, crystal: 2, circuit: 2 },
     });
   });
 });

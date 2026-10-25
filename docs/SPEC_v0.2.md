@@ -35,7 +35,7 @@ All UI stays on the pixel grid (game pixels, whole-number positions, the existin
   - Header with the ship name and current resources.
   - **Services** row: Refuel and Repair as buttons with costs.
   - **Upgrades** grid: one card per upgrade line, with its icon, name, current tier as pips (e.g. ●●○), the next tier's effect and cost (cost icons turn red when you can't afford them), and a Build button. Maxed lines show "MAX".
-  - Mouse (hover highlight, click) and keyboard (arrows/WASD to move the selection, E/Enter/Space to build, Esc to close).
+  - Mouse (hover highlight, click a card to select it, click Build) and keyboard (arrows/WASD to move the selection, Space/Enter to build, 1/2 for refuel/repair, E or Esc to close). *(Changed during M7: E closes, as it opens, so it can't build by accident.)*
 - **Pause screen** uses the same frame.
 - **Toast/banners** use the frame with an icon (e.g. the upgrade's icon when one is built).
 
@@ -92,7 +92,8 @@ Each milestone ends as in v0.1: type check, unit and browser tests, commit, depl
 **Acceptance:** each upgrade line can be built to max and its effect is measurable in game; a v1 save with plating loads as Plating 1; reload keeps all tiers.
 
 ### M8 — Economy
-- Circuits from drones; HUD and costs use them.
+- ~~Circuits from drones; HUD and costs use them.~~ *(Moved into M7: upgrade costs needed all three resources.)*
+- Drone drops get a unique id per kill, so a respawned drone's drop isn't already "collected".
 - Respawning salvage and drones on play time, persisted in the save.
 - Distance-scaled resource amounts.
 

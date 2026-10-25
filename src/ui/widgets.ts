@@ -70,7 +70,7 @@ export class Plate extends Phaser.GameObjects.Container {
     if (tint !== undefined) this.text.setTint(tint);
     const { padX, padY, minHeight } = this.opts;
     const textH = Math.max(GLYPH_H, Math.round(this.text.height) - 1);
-    const h = Math.max(minHeight, textH + padY * 2);
+    const h = Math.max(minHeight, textH + padY * 2, this.icon ? this.icon.height + 6 : 0);
     let x = padX;
     if (this.icon) {
       this.icon.setPosition(x, Math.round((h - this.icon.height) / 2));

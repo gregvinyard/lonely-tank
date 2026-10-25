@@ -1,17 +1,19 @@
 import * as Phaser from 'phaser';
 import { sfx } from '../audio/sfx';
 import { keyOnce } from '../input/keyOnce';
-import { FUEL, HULL, WORKSHOP } from '../data/tuning';
+import { FUEL, HULL } from '../data/tuning';
+import { upgradeDef } from '../data/upgrades';
 import { compassPlacement } from '../systems/compass';
 import type { Inventory } from '../systems/inventory';
 import type { ResourceKind } from '../systems/resources';
-import { applyAction, objectiveText, type WorkshopAction } from '../systems/workshop';
-import { Bar, Button, Plate, UI_TEXT, centerOn, frame, label } from '../ui/widgets';
+import { RESOURCE_KINDS } from '../systems/resources';
+import { goalText } from '../systems/workshop';
+import { RESOURCE_ICON, WorkshopPanel } from '../ui/WorkshopPanel';
+import { Bar, Plate, UI_TEXT, centerOn, frame, label } from '../ui/widgets';
 import {
   COLLECTED_EVENT,
   RESCUED_EVENT,
   WORKSHOP_EVENT,
-  WORKSHOP_TUNING,
   type CollectedPayload,
   type GameScene,
   type RescuedPayload,
@@ -21,34 +23,27 @@ import {
 const COLOR = { ...UI_TEXT, hull: UI_TEXT.good } as const;
 /** Bar length for the base hull/fuel; bars grow with upgrades. */
 const BAR_W = 48;
-const LABELS: Record<ResourceKind, string> = { scrap: 'Scrap', crystal: 'Crystal' };
+const LABELS: Record<ResourceKind, string> = { scrap: 'Scrap', crystal: 'Crystal', circuit: 'Circuit' };
+const KIND_COLOR: Record<ResourceKind, number> = { scrap: 0xc9cdd2, crystal: 0xc9a6f2, circuit: 0x7ec850 };
+const PANEL_H = 84;
 const HINT_MS = 45000; // the short controls hint fades after this; the pause screen lists them all
 const CONTROLS: [string, string][] = [
   ['WASD', 'Drive'],
   ['Mouse', 'Aim turret'],
   ['Left click', 'Fire (hold)'],
   ['E', 'Salvage / workshop'],
-  ['1 2 3', 'Workshop actions'],
+  ['1 / 2', 'Refuel / repair'],
+  ['Space', 'Build upgrade'],
   ['M', 'Sound on/off'],
   ['Esc / P', 'Pause'],
 ];
-const WORKSHOP_W = 232;
-const WORKSHOP_H = 128;
-
-interface WorkshopRow {
-  action: WorkshopAction;
-  button: Button;
-  /** The button's frame; tests click its bounds. */
-  bg: Phaser.GameObjects.NineSlice;
-  label: Phaser.GameObjects.BitmapText;
-  cost: Phaser.GameObjects.BitmapText;
-}
-
 // Screen-space interface drawn over the Game scene, built from the pixel-art
 // UI kit. Positions and sizes are in game pixels on the same grid as the world.
 // It reads the Game scene's state each frame rather than owning any of it.
 export class HudScene extends Phaser.Scene {
   private game_!: GameScene;
+  private scanner!: Phaser.GameObjects.Graphics;
+  private scannerLabel!: Plate;
   private counts!: Record<ResourceKind, Phaser.GameObjects.BitmapText>;
   private panel!: Phaser.GameObjects.NineSlice;
   private hullBar!: Bar;
@@ -64,8 +59,7 @@ export class HudScene extends Phaser.Scene {
   banner!: Plate;
   bannerText!: Phaser.GameObjects.BitmapText;
   private bannerTimer?: Phaser.Time.TimerEvent;
-  workshop!: Phaser.GameObjects.Container;
-  private rows: WorkshopRow[] = [];
+  workshop!: WorkshopPanel;
   workshopMessage!: Phaser.GameObjects.BitmapText;
   pauseMenu!: Phaser.GameObjects.Container;
   private pauseDim!: Phaser.GameObjects.Rectangle;
@@ -84,7 +78,6 @@ export class HudScene extends Phaser.Scene {
     this.game_ = this.scene.get('Game') as GameScene;
     this.shownHull = -1;
     this.paused = false;
-    this.rows = [];
 
     this.createStatsPanel();
     this.goal = new Plate(this, '', { tint: COLOR.dim });
@@ -96,10 +89,13 @@ export class HudScene extends Phaser.Scene {
     this.time.delayedCall(HINT_MS, () => this.tweens.add({ targets: this.hint, alpha: 0, duration: 800 }));
     this.warning = new Plate(this, '', { tint: COLOR.danger, icon: 'icon_warn' }).setVisible(false);
     this.toast = new Plate(this, '').setVisible(false);
+    this.scanner = this.add.graphics();
+    this.scannerLabel = new Plate(this, '').setVisible(false);
     this.compass = this.add.graphics();
     this.compassLabel = new Plate(this, '', { tint: COLOR.accent });
 
-    this.createWorkshop();
+    this.workshop = new WorkshopPanel(this, this.game_);
+    this.workshopMessage = this.workshop.message;
     this.banner = new Plate(this, '', { frameKey: 'ui_panel', padX: 9, padY: 9, tint: COLOR.danger }).setVisible(false).setDepth(5);
     this.bannerText = this.banner.text;
     this.createPauseMenu();
@@ -108,6 +104,18 @@ export class HudScene extends Phaser.Scene {
     kb.on('keydown-ESC', keyOnce(() => (this.game_.workshopOpen ? this.game_.closeWorkshop() : this.togglePause())));
     kb.on('keydown-P', keyOnce(() => !this.game_.workshopOpen && this.togglePause()));
     kb.on('keydown-M', keyOnce(() => this.showToast(sfx.toggleMute() ? 'Sound off' : 'Sound on')));
+    // Workshop navigation (the tank holds still while it's open, so WASD is free).
+    const nav = (key: string, fn: () => void) => kb.on(`keydown-${key}`, keyOnce(() => this.game_.workshopOpen && !this.paused && fn()));
+    for (const [keys, dx, dy] of [
+      [['LEFT', 'A'], -1, 0],
+      [['RIGHT', 'D'], 1, 0],
+      [['UP', 'W'], 0, -1],
+      [['DOWN', 'S'], 0, 1],
+    ] as const) {
+      for (const k of keys) nav(k, () => this.workshop.move(dx, dy));
+    }
+    nav('SPACE', () => this.workshop.buildSelected());
+    nav('ENTER', () => this.workshop.buildSelected());
 
     const onCollected = (p: CollectedPayload) => this.onCollected(p);
     const onRescued = (p: RescuedPayload) => this.onRescued(p);
@@ -143,27 +151,28 @@ export class HudScene extends Phaser.Scene {
     this.updateWarning(width);
     this.toast.setPosition(width - 4 - this.toast.width, 4);
     this.hint.setPosition(4, height - 4 - this.hint.height);
-    // Below the workshop panel while it's open, otherwise just under the goal plate.
-    const bannerTop = g.workshopOpen ? height / 2 + WORKSHOP_H / 2 + 6 : this.goal.y + this.goal.height + 6;
+    // At the top of the screen while the workshop is open, otherwise just below the tank
+    // (the camera keeps it centered), clear of the prompt along the bottom.
+    const bannerTop = g.workshopOpen ? 2 : height / 2 + 28;
     this.banner.setPosition(Math.round((width - this.banner.width) / 2), Math.round(bannerTop));
     this.layoutPause(width, height);
     this.updateBars();
     this.updateGoal();
     this.updateWorkshop(width, height);
+    this.drawScanner(width, height);
     this.drawCompass(width, height);
   }
 
   private createStatsPanel() {
-    this.panel = frame(this, 'ui_panel', 4, 4, 96, 68);
+    this.panel = frame(this, 'ui_panel', 4, 4, 96, PANEL_H);
     this.hullBar = new Bar(this, 10, 11, 'icon_hull', BAR_W, HULL.max);
     this.fuelBar = new Bar(this, 10, 23, 'icon_fuel', BAR_W, FUEL.max);
     // Half-size item icons: a 2:1 nearest downscale keeps them on the grid.
-    this.add.image(9, 34, 'scrap').setOrigin(0, 0).setScale(0.5);
-    this.add.image(9, 50, 'crystal').setOrigin(0, 0).setScale(0.5);
-    this.counts = {
-      scrap: label(this, 28, 39, ''),
-      crystal: label(this, 28, 55, ''),
-    };
+    this.counts = {} as Record<ResourceKind, Phaser.GameObjects.BitmapText>;
+    RESOURCE_KINDS.forEach((k, i) => {
+      this.add.image(9, 34 + i * 16, RESOURCE_ICON[k]).setOrigin(0, 0).setScale(0.5);
+      this.counts[k] = label(this, 28, 39 + i * 16, '');
+    });
     this.setCounts(this.game_.inventory);
   }
 
@@ -182,12 +191,12 @@ export class HudScene extends Phaser.Scene {
       this.fuelBar.x + this.fuelBar.width,
       ...Object.values(this.counts).map((t) => t.x + Math.round(t.width)),
     );
-    this.panel.setSize(right + 7 - this.panel.x, 68);
+    this.panel.setSize(right + 7 - this.panel.x, PANEL_H);
   }
 
   private updateGoal() {
     const g = this.game_;
-    const s = objectiveText(g.inventory, g.plating, WORKSHOP_TUNING);
+    const s = goalText(g.levels);
     if (this.goal.text.text !== s.toUpperCase()) this.goal.setLabel(s);
     this.goal.setPosition(4, this.panel.y + this.panel.height + 2);
   }
@@ -248,60 +257,53 @@ export class HudScene extends Phaser.Scene {
     this.toastTimer = this.time.delayedCall(1500, () => this.toast.setVisible(false));
   }
 
-  private createWorkshop() {
-    const items: [WorkshopAction, string][] = [
-      ['refuel', '[1] Refuel'],
-      ['repair', '[2] Repair'],
-      ['plating', '[3] Craft reinforced plating'],
-    ];
-    const parts: Phaser.GameObjects.GameObject[] = [frame(this, 'ui_panel', 0, 0, WORKSHOP_W, WORKSHOP_H)];
-    const title = label(this, 0, 9, 'Workshop', COLOR.accent);
-    title.setX(Math.round((WORKSHOP_W - title.width) / 2));
-    parts.push(title);
-    items.forEach(([action, text], i) => {
-      const button = new Button(this, 6, 20 + i * 26, WORKSHOP_W - 12, 24, () => this.game_.workshopAction(action));
-      const row: WorkshopRow = {
-        action,
-        button,
-        bg: button.bg,
-        label: label(this, 6, 5, text),
-        cost: label(this, 14, 14, '', COLOR.dim),
-      };
-      button.add([row.label, row.cost]);
-      this.rows.push(row);
-      parts.push(button);
-    });
-    this.workshopMessage = label(this, 0, 100, '', COLOR.accent);
-    const close = label(this, 0, 113, '[E] or [Esc] close', COLOR.dim);
-    close.setX(Math.round((WORKSHOP_W - close.width) / 2));
-    parts.push(this.workshopMessage, close);
-    this.workshop = this.add.container(0, 0, parts).setSize(WORKSHOP_W, WORKSHOP_H).setVisible(false);
-  }
-
   private updateWorkshop(width: number, height: number) {
-    const g = this.game_;
-    if (!g.workshopOpen) {
+    const open = this.game_.workshopOpen;
+    if (!open) {
       if (this.workshop.visible) this.workshopMessage.setText('');
       this.workshop.setVisible(false);
       return;
     }
-    centerOn(this.workshop.setVisible(true), width / 2, height / 2);
-    this.workshopMessage.setX(Math.round((WORKSHOP_W - this.workshopMessage.width) / 2));
-    const r = WORKSHOP.repair;
-    const p = WORKSHOP.plating;
-    const costs: Record<WorkshopAction, string> = {
-      refuel: `Free · fuel ${Math.floor(g.fuel)}/${g.maxFuel}`,
-      repair: `${r.scrap} scrap · +${r.hull} hull · ${Math.ceil(g.hull)}/${g.maxHull}`,
-      plating: g.plating ? 'Installed' : `${p.scrap} scrap, ${p.crystal} crystal · +${p.maxHull} max hull`,
-    };
-    const status = { hull: g.hull, fuel: g.fuel, maxFuel: g.maxFuel, inventory: g.inventory, plating: g.plating };
-    for (const row of this.rows) {
-      const cost = costs[row.action].toUpperCase();
-      if (row.cost.text !== cost) row.cost.setText(cost);
-      // Grey out what can't be done right now.
-      const can = applyAction(status, row.action, WORKSHOP_TUNING).ok;
-      row.button.setEnabled(can);
-      row.label.setTint(can ? COLOR.text : COLOR.dim);
+    this.workshop.setVisible(true);
+    centerOn(this.workshop, width / 2, height / 2);
+    this.workshop.refresh();
+  }
+
+  /** Salvage scanner: a marker over the nearest node, or an edge arrow toward it; tier 2 adds type and range. */
+  private drawScanner(width: number, height: number) {
+    const g = this.game_;
+    const node = g.nearestSalvage;
+    this.scanner.clear();
+    this.scannerLabel.setVisible(false);
+    if (!node || g.workshopOpen) return;
+    const view = g.cameras.main.worldView;
+    const color = KIND_COLOR[node.kind];
+    const sx = Math.round(node.x - view.x);
+    const sy = Math.round(node.y - view.y);
+    const bob = Math.floor(this.time.now / 250) % 2;
+    const place = compassPlacement({ x: sx, y: sy }, { width, height }, 8, 14);
+    if (!place) {
+      // A small chevron hovering over it.
+      const y = sy - 16 - bob;
+      this.scanner.fillStyle(0x0d0b10).fillTriangle(sx - 5, y - 1, sx + 5, y - 1, sx, y + 5);
+      this.scanner.fillStyle(color).fillTriangle(sx - 3, y, sx + 3, y, sx, y + 3);
+      return;
+    }
+    const x = Math.round(place.x);
+    const y = Math.round(place.y);
+    const a = place.angle;
+    const pt = (d: number, o: number) => ({ x: x + Math.cos(a + o) * d, y: y + Math.sin(a + o) * d });
+    const tip = pt(6 + bob, 0);
+    const l = pt(4, 2.4);
+    const rr = pt(4, -2.4);
+    this.scanner.fillStyle(0x0d0b10).fillCircle(x, y, 6);
+    this.scanner.fillStyle(color).fillTriangle(tip.x, tip.y, l.x, l.y, rr.x, rr.y);
+    if (g.stats.scanner >= 2) {
+      const meters = Math.round(Math.hypot(g.tank.x - node.x, g.tank.y - node.y) / 10);
+      const s = `${LABELS[node.kind]} ${meters}m`;
+      if (this.scannerLabel.text.text !== s.toUpperCase()) this.scannerLabel.setLabel(s, color);
+      this.scannerLabel.setVisible(true);
+      centerOn(this.scannerLabel, x - Math.cos(a) * 30, y - Math.sin(a) * 16);
     }
   }
 
@@ -348,20 +350,22 @@ export class HudScene extends Phaser.Scene {
   private onRescued({ reason, lost }: RescuedPayload) {
     this.setCounts(this.game_.inventory);
     const why = reason === 'fuel' ? 'Out of fuel' : 'Tank disabled';
-    this.showBanner(`${why} · rescued to ship\nLost ${lost.scrap} scrap, ${lost.crystal} crystal`, COLOR.danger, 'icon_warn');
+    const parts = RESOURCE_KINDS.filter((k) => lost[k] > 0).map((k) => `${lost[k]} ${k}`);
+    this.showBanner(`${why} · rescued to ship\n${parts.length ? `Lost ${parts.join(', ')}` : 'No salvage lost'}`, COLOR.danger, 'icon_warn');
   }
 
-  private onWorkshop({ action, ok, message }: WorkshopPayload) {
+  private onWorkshop({ ok, message, built }: WorkshopPayload) {
     this.setCounts(this.game_.inventory);
     this.workshopMessage.setText(message.toUpperCase()).setTint(ok ? COLOR.accent : COLOR.danger);
-    if (ok && action === 'plating') {
-      this.showBanner(`Reinforced plating installed\nMax hull ${this.game_.maxHull} · objective complete`, COLOR.accent, 'icon_up');
+    if (built) {
+      const def = upgradeDef(built.id);
+      const max = built.tier >= def.tiers.length;
+      this.showBanner(`${def.name} ${built.tier} built\n${max ? 'Fully upgraded' : def.tiers[built.tier - 1].effect}`, COLOR.accent, def.icon);
     }
   }
 
   private setCounts(inv: Inventory) {
-    this.counts.scrap.setText(`SCRAP   ${inv.scrap}`);
-    this.counts.crystal.setText(`CRYSTAL ${inv.crystal}`);
+    for (const k of RESOURCE_KINDS) this.counts[k].setText(`${LABELS[k].toUpperCase().padEnd(8)}${inv[k]}`);
   }
 
   private onCollected({ kind, amount, inventory }: CollectedPayload) {

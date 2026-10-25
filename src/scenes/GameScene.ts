@@ -19,6 +19,7 @@ import {
 } from '../data/tuning';
 import { sfx } from '../audio/sfx';
 import { ROCK_VARIANTS } from '../data/assets';
+import { noUpgrades, type UpgradeId, type UpgradeLevels } from '../data/upgrades';
 import { Drone } from '../entities/Drone';
 import { Tank } from '../entities/Tank';
 import { keyOnce } from '../input/keyOnce';
@@ -26,13 +27,15 @@ import { applyDamage, canFire, rescuePenalty } from '../systems/combat';
 import { burnFuel } from '../systems/fuel';
 import { addResource, createInventory, type Inventory } from '../systems/inventory';
 import { nearestInRange, type ResourceKind, type ResourceNode } from '../systems/resources';
-import { SAVE_VERSION, browserStorage, clampTank, clearSave, hasSave, loadSave, writeSave, type SaveData } from '../systems/save';
-import { applyAction, maxHullFor, type TankStatus, type WorkshopAction, type WorkshopTuning } from '../systems/workshop';
+import { SAVE_VERSION, browserStorage, clampTank, clearSave, hasSave, loadSave, writeSave, type SaveData, type SavedDrop } from '../systems/save';
+import { UPGRADE_EFFECTS, computeStats, type TankStats } from '../systems/stats';
+import { build, service, type ActionResult, type ServiceAction, type TankStatus } from '../systems/workshop';
 import { generateWorld, type World } from '../systems/worldgen';
 
-type Keys = Record<'up' | 'down' | 'left' | 'right' | 'interact' | 'one' | 'two' | 'three', Phaser.Input.Keyboard.Key>;
+type Keys = Record<'up' | 'down' | 'left' | 'right' | 'interact' | 'one' | 'two', Phaser.Input.Keyboard.Key>;
 
-export const WORKSHOP_TUNING: WorkshopTuning = { baseHull: HULL.max, repair: WORKSHOP.repair, plating: WORKSHOP.plating };
+/** Longest frame counted toward play time, so a tab coming back from the background doesn't jump the clock. */
+const MAX_FRAME_MS = 250;
 
 /** Emitted on game.events when the player salvages a node. */
 export const COLLECTED_EVENT = 'resource-collected';
@@ -53,26 +56,33 @@ export interface RescuedPayload {
 /** Emitted on game.events after every workshop action, successful or not. */
 export const WORKSHOP_EVENT = 'workshop-action';
 export interface WorkshopPayload {
-  action: WorkshopAction;
+  action: ServiceAction | UpgradeId;
   ok: boolean;
   message: string;
+  /** Set when an upgrade tier was built. */
+  built?: { id: UpgradeId; tier: number };
 }
 
 export class GameScene extends Phaser.Scene {
   world!: World;
   tank!: Tank;
   inventory: Inventory = createInventory();
-  hull: number = HULL.max;
-  fuel: number = FUEL.max;
-  readonly maxFuel = FUEL.max;
-  plating = false;
+  levels: UpgradeLevels = noUpgrades();
+  /** Current stats from the upgrade levels; recomputed whenever they change. */
+  stats: TankStats = computeStats(this.levels);
+  hull = this.stats.maxHull;
+  fuel = this.stats.maxFuel;
+  /** Milliseconds of unpaused play; drives respawns. */
+  playTimeMs = 0;
   /** Uncollected resource nodes by stable id. */
   readonly resources = new Map<string, { node: ResourceNode; sprite: Phaser.GameObjects.Image; glow?: Phaser.GameObjects.Image }>();
   /** Live drones by stable id. */
   readonly drones = new Map<string, Drone>();
-  /** Ids of everything collected or destroyed, for the save. */
-  readonly collected = new Set<string>();
-  readonly destroyed = new Set<string>();
+  /** Everything collected or destroyed, with the play time it happened at. */
+  readonly collected = new Map<string, number>();
+  readonly destroyed = new Map<string, number>();
+  /** The salvage nearest the tank, for the scanner. */
+  nearestSalvage: ResourceNode | undefined;
   /** The node the tank is close enough to salvage, if any. */
   nearby: ResourceNode | undefined;
   inSafeZone = true;
@@ -91,6 +101,8 @@ export class GameScene extends Phaser.Scene {
   private dustDistance = 0;
   private lastFired = -Infinity;
   private invulnUntil = 0;
+  /** Scene time of the last hit, for the field repair kit. */
+  private lastHitAt = -Infinity;
   /** Set when the workshop closes; holds fire until the mouse button is released. */
   private holdFire = false;
 
@@ -99,24 +111,31 @@ export class GameScene extends Phaser.Scene {
   }
 
   get maxHull() {
-    return maxHullFor(this.plating, WORKSHOP_TUNING);
+    return this.stats.maxHull;
+  }
+
+  get maxFuel() {
+    return this.stats.maxFuel;
   }
 
   create() {
     const save = this.readSave();
     this.world = generateWorld(save?.seed ?? WORLD_SEED);
     this.inventory = save?.inventory ?? createInventory();
-    this.plating = save?.upgrades.plating ?? false;
+    this.levels = save?.upgrades ?? noUpgrades();
+    this.stats = computeStats(this.levels);
+    this.playTimeMs = save?.playTimeMs ?? 0;
     this.hull = this.maxHull;
     this.fuel = this.maxFuel;
     this.resources.clear();
     this.drones.clear();
     this.collected.clear();
     this.destroyed.clear();
-    for (const id of save?.collected ?? []) this.collected.add(id);
-    for (const id of save?.destroyed ?? []) this.destroyed.add(id);
+    for (const e of save?.collected ?? []) this.collected.set(e.id, e.at);
+    for (const e of save?.destroyed ?? []) this.destroyed.set(e.id, e.at);
     this.lastFired = -Infinity;
     this.invulnUntil = 0;
+    this.lastHitAt = -Infinity;
     this.docked = false;
     this.workshopOpen = false;
     this.holdFire = false;
@@ -151,7 +170,7 @@ export class GameScene extends Phaser.Scene {
 
     for (const node of this.world.resources) if (!this.collected.has(node.id)) this.addResourceNode(node);
     for (const d of save?.drops ?? []) {
-      if (!this.collected.has(d.id)) this.addResourceNode({ ...d, kind: 'scrap', angle: 0 });
+      if (!this.collected.has(d.id)) this.addResourceNode({ ...d, angle: 0, dropped: true });
     }
 
     this.dust = this.add.particles(0, 0, 'dust', {
@@ -213,12 +232,10 @@ export class GameScene extends Phaser.Scene {
       interact: 'E',
       one: 'ONE',
       two: 'TWO',
-      three: 'THREE',
     }) as Keys;
     this.keys.interact.on('down', keyOnce(() => this.interact()));
-    this.keys.one.on('down', keyOnce(() => this.workshopOpen && this.workshopAction('refuel')));
-    this.keys.two.on('down', keyOnce(() => this.workshopOpen && this.workshopAction('repair')));
-    this.keys.three.on('down', keyOnce(() => this.workshopOpen && this.workshopAction('plating')));
+    this.keys.one.on('down', keyOnce(() => this.workshopOpen && this.workshopService('refuel')));
+    this.keys.two.on('down', keyOnce(() => this.workshopOpen && this.workshopService('repair')));
 
     // Autosave on a timer and when the page is hidden or closed.
     this.time.addEvent({ delay: SAVE.autosaveMs, loop: true, callback: () => this.save() });
@@ -255,10 +272,12 @@ export class GameScene extends Phaser.Scene {
     const pointer = this.input.activePointer;
     const aim = pointer.positionToCamera(this.cameras.main) as Phaser.Math.Vector2;
 
-    this.tank.update(input, aim, delta);
+    this.playTimeMs += Math.min(delta, MAX_FRAME_MS);
+    const st = this.stats;
+    this.tank.update(input, aim, delta, st);
     if (!pointer.leftButtonDown()) this.holdFire = false;
     const firing = pointer.leftButtonDown() && !this.workshopOpen && !this.holdFire;
-    if (firing && canFire(time, this.lastFired, CANNON.cooldownMs)) this.fire(time);
+    if (firing && canFire(time, this.lastFired, st.cooldownMs)) this.fire(time);
 
     // Camera lerp is applied once per frame; scale it so the follow feels the
     // same at 60 Hz and 144 Hz.
@@ -266,12 +285,13 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.setLerp(l, l);
     this.emitDust(delta);
 
-    this.fuel = burnFuel(this.fuel, this.tank.speed, TANK.maxSpeed, delta, FUEL.perSecond);
+    this.fuel = burnFuel(this.fuel, this.tank.speed, st.maxSpeed, delta, FUEL.perSecond);
     const lowFuel = this.fuel / this.maxFuel <= FUEL.lowFraction;
     if (lowFuel && !this.fuelWarned) sfx.play('lowFuel');
     this.fuelWarned = lowFuel;
     if (this.fuel <= 0) this.rescue('fuel');
     this.emitSmoke(delta);
+    this.fieldRepair(time, delta);
 
     const c = this.world.center;
     const fromShip = Math.hypot(this.tank.x - c.x, this.tank.y - c.y);
@@ -284,7 +304,7 @@ export class GameScene extends Phaser.Scene {
     for (const d of this.drones.values()) d.update(time, delta, this.tank, this.inSafeZone, c, SHIP.safeRadius);
 
     for (const s of this.shells.getChildren() as Phaser.Physics.Arcade.Image[]) {
-      if (time - (s.getData('born') as number) > CANNON.lifetimeMs) s.destroy();
+      if (time - (s.getData('born') as number) > st.shellLifetimeMs) s.destroy();
     }
 
     // Blink while invulnerable after a hit.
@@ -294,37 +314,64 @@ export class GameScene extends Phaser.Scene {
 
     const nodes = Array.from(this.resources.values(), (r) => r.node);
     this.nearby = nearestInRange(this.tank, nodes, RESOURCES.interactRange);
+    this.nearestSalvage = st.scanner > 0 ? nearestInRange(this.tank, nodes, Infinity) : undefined;
   }
 
-  /** Runs a workshop action; saves when it succeeds. */
-  workshopAction(action: WorkshopAction) {
-    const status: TankStatus = { hull: this.hull, fuel: this.fuel, maxFuel: this.maxFuel, inventory: this.inventory, plating: this.plating };
-    const result = applyAction(status, action, WORKSHOP_TUNING);
-    if (result.ok) {
-      ({ hull: this.hull, fuel: this.fuel, inventory: this.inventory, plating: this.plating } = result.status);
-      this.save();
-    }
-    sfx.play(!result.ok ? 'deny' : action === 'plating' ? 'craft' : 'ok');
+  /** The repair kit slowly mends the hull while the tank is stopped and hasn't been hit for a while. */
+  private fieldRepair(time: number, delta: number) {
+    const rate = this.stats.repairPerSec;
+    if (rate <= 0 || this.hull >= this.maxHull || this.tank.speed > 1) return;
+    if (time - this.lastHitAt < UPGRADE_EFFECTS.repairCalmMs) return;
+    this.hull = Math.min(this.maxHull, this.hull + (rate * delta) / 1000);
+  }
+
+  get status(): TankStatus {
+    return { hull: this.hull, fuel: this.fuel, inventory: this.inventory, levels: this.levels };
+  }
+
+  /** Refuel or repair; saves when it succeeds. */
+  workshopService(action: ServiceAction) {
+    const result = service(this.status, action, WORKSHOP.repair);
+    this.applyResult(result);
+    sfx.play(result.ok ? 'ok' : 'deny');
     this.game.events.emit(WORKSHOP_EVENT, { action, ok: result.ok, message: result.message } satisfies WorkshopPayload);
+  }
+
+  /** Builds the next tier of an upgrade line; saves when it succeeds. */
+  buildUpgrade(id: UpgradeId) {
+    const result = build(this.status, id);
+    this.applyResult(result);
+    sfx.play(result.ok ? 'craft' : 'deny');
+    const built = result.ok ? { id, tier: this.levels[id] } : undefined;
+    this.game.events.emit(WORKSHOP_EVENT, { action: id, ok: result.ok, message: result.message, built } satisfies WorkshopPayload);
+  }
+
+  private applyResult(result: ActionResult) {
+    if (!result.ok) return;
+    ({ hull: this.hull, fuel: this.fuel, inventory: this.inventory, levels: this.levels } = result.status);
+    this.stats = computeStats(this.levels);
+    this.save();
   }
 
   /** Writes the current progress to localStorage. Returns false if it couldn't. */
   save(): boolean {
     const storage = browserStorage();
     if (!storage) return false;
-    const drops = [...this.resources.values()]
+    const drops: SavedDrop[] = [...this.resources.values()]
       .map((r) => r.node)
-      .filter((n) => n.id.endsWith('-drop'))
-      .map(({ id, amount, x, y }) => ({ id, amount, x, y }));
+      .filter((n) => n.dropped)
+      .map(({ id, kind, amount, x, y }) => ({ id, kind, amount, x, y }));
+    const events = (m: Map<string, number>) => [...m].map(([id, at]) => ({ id, at }));
     const data: SaveData = {
       version: SAVE_VERSION,
       seed: this.world.seed,
+      playTimeMs: Math.round(this.playTimeMs),
       tank: { x: this.tank.x, y: this.tank.y, hull: this.hull, fuel: this.fuel },
       inventory: this.inventory,
-      collected: [...this.collected],
-      destroyed: [...this.destroyed],
+      collected: events(this.collected),
+      destroyed: events(this.destroyed),
       drops,
-      upgrades: { plating: this.plating },
+      upgrades: this.levels,
     };
     return writeSave(storage, SAVE.key, data);
   }
@@ -376,7 +423,7 @@ export class GameScene extends Phaser.Scene {
   private collect(node: ResourceNode) {
     const entry = this.resources.get(node.id)!;
     this.resources.delete(node.id);
-    this.collected.add(node.id);
+    this.collected.set(node.id, this.playTimeMs);
     this.nearby = undefined;
     this.inventory = addResource(this.inventory, node.kind, node.amount);
     sfx.play('pickup');
@@ -433,7 +480,7 @@ export class GameScene extends Phaser.Scene {
   private onShellHit(shell: Phaser.Physics.Arcade.Image, drone: Drone) {
     if (!shell.active || !this.drones.has(drone.placement.id)) return;
     this.impact(shell);
-    if (drone.hit(CANNON.damage, this.tank, this.time.now)) this.destroyDrone(drone);
+    if (drone.hit(this.stats.damage, this.tank, this.time.now)) this.destroyDrone(drone);
     else sfx.play('hit');
   }
 
@@ -441,7 +488,7 @@ export class GameScene extends Phaser.Scene {
     const { x, y } = drone;
     const p = drone.placement;
     this.drones.delete(p.id);
-    this.destroyed.add(p.id);
+    this.destroyed.set(p.id, this.playTimeMs);
     drone.destroy();
 
     this.sparks.explode(18, x, y);
@@ -449,9 +496,11 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.shake(120, 0.004);
     sfx.play('explode');
 
-    if (p.drop > 0) {
-      this.addResourceNode({ id: `${p.id}-drop`, kind: 'scrap', amount: p.drop, x: Math.round(x), y: Math.round(y), angle: 0 });
-    }
+    // Every drone leaves a circuit; some also leave scrap.
+    const at = { x: Math.round(x), y: Math.round(y) };
+    const side = p.drop > 0 ? 9 : 0;
+    this.addResourceNode({ id: `${p.id}-chip`, kind: 'circuit', amount: 1, x: at.x + side, y: at.y, angle: 0, dropped: true });
+    if (p.drop > 0) this.addResourceNode({ id: `${p.id}-drop`, kind: 'scrap', amount: p.drop, x: at.x - side, y: at.y, angle: 0, dropped: true });
   }
 
   private onDroneContact(drone: Drone) {
@@ -460,6 +509,7 @@ export class GameScene extends Phaser.Scene {
     if (now < this.invulnUntil) return;
 
     this.invulnUntil = now + HULL.hitInvulnMs;
+    this.lastHitAt = now;
     this.hull = applyDamage(this.hull, DRONES.contactDamage);
     this.cameras.main.shake(150, 0.006);
     this.sparks.explode(8, (this.tank.x + drone.x) / 2, (this.tank.y + drone.y) / 2);

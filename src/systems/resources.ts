@@ -1,6 +1,9 @@
 import { createRng, randRange } from './rng';
 
-export type ResourceKind = 'scrap' | 'crystal';
+export type ResourceKind = 'scrap' | 'crystal' | 'circuit';
+/** Kinds scattered in the world; circuits only come from drones. */
+export type WorldResourceKind = 'scrap' | 'crystal';
+export const RESOURCE_KINDS: ResourceKind[] = ['scrap', 'crystal', 'circuit'];
 
 export interface ResourceNode {
   /** Stable across reloads for the same seed, e.g. "scrap-07". */
@@ -10,6 +13,8 @@ export interface ResourceNode {
   x: number;
   y: number;
   angle: number; // visual rotation only, radians
+  /** Left by a destroyed drone (saved with its position) rather than placed by world generation. */
+  dropped?: boolean;
 }
 
 export interface ResourceKindOptions {
@@ -28,7 +33,7 @@ export interface ResourceOptions {
   avoid: { x: number; y: number }[]; // rock centers
   avoidRadius: number;
   minSpacing: number;
-  kinds: Record<ResourceKind, ResourceKindOptions>;
+  kinds: Record<WorldResourceKind, ResourceKindOptions>;
 }
 
 /** Deterministically scatters scrap and crystals away from the ship, rocks and each other. */

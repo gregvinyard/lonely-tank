@@ -1,69 +1,110 @@
+import { UPGRADES, upgradeDef, type Cost, type UpgradeId, type UpgradeLevels } from '../data/upgrades';
 import type { Inventory } from './inventory';
+import { RESOURCE_KINDS } from './resources';
+import { computeStats } from './stats';
 
 /** Everything the workshop can read or change. */
 export interface TankStatus {
   hull: number;
   fuel: number;
-  maxFuel: number;
   inventory: Inventory;
-  plating: boolean;
+  levels: UpgradeLevels;
 }
 
-export interface WorkshopTuning {
-  baseHull: number;
-  repair: { scrap: number; hull: number };
-  plating: { scrap: number; crystal: number; maxHull: number };
+export interface RepairTuning {
+  scrap: number;
+  hull: number;
 }
 
-export type WorkshopAction = 'refuel' | 'repair' | 'plating';
+export type ServiceAction = 'refuel' | 'repair';
 export type ActionResult = { ok: true; status: TankStatus; message: string } | { ok: false; message: string };
 
-/** Max hull comes from the upgrade, never from stored numbers. */
-export function maxHullFor(plating: boolean, t: WorkshopTuning): number {
-  return t.baseHull + (plating ? t.plating.maxHull : 0);
+export function canAfford(inv: Inventory, cost: Cost): boolean {
+  return RESOURCE_KINDS.every((k) => inv[k] >= (cost[k] ?? 0));
 }
 
-export function applyAction(s: TankStatus, action: WorkshopAction, t: WorkshopTuning): ActionResult {
-  const inv = s.inventory;
-  switch (action) {
-    case 'refuel':
-      if (s.fuel >= s.maxFuel) return { ok: false, message: 'Fuel tank is already full' };
-      return { ok: true, status: { ...s, fuel: s.maxFuel }, message: 'Refueled' };
+export function spend(inv: Inventory, cost: Cost): Inventory {
+  return { scrap: inv.scrap - (cost.scrap ?? 0), crystal: inv.crystal - (cost.crystal ?? 0), circuit: inv.circuit - (cost.circuit ?? 0) };
+}
 
-    case 'repair': {
-      const max = maxHullFor(s.plating, t);
-      if (s.hull >= max) return { ok: false, message: 'Hull is already intact' };
-      if (inv.scrap < t.repair.scrap) return { ok: false, message: `Need ${t.repair.scrap} scrap` };
-      return {
-        ok: true,
-        status: { ...s, hull: Math.min(max, s.hull + t.repair.hull), inventory: { ...inv, scrap: inv.scrap - t.repair.scrap } },
-        message: `Repaired +${t.repair.hull} hull`,
-      };
-    }
+/** "8 scrap, 2 crystal, 1 circuit" */
+export function costText(cost: Cost): string {
+  return RESOURCE_KINDS.filter((k) => cost[k])
+    .map((k) => `${cost[k]} ${k}`)
+    .join(', ');
+}
 
-    case 'plating': {
-      const c = t.plating;
-      if (s.plating) return { ok: false, message: 'Plating already installed' };
-      if (inv.scrap < c.scrap || inv.crystal < c.crystal) return { ok: false, message: `Need ${c.scrap} scrap, ${c.crystal} crystal` };
-      return {
-        ok: true,
-        // The new plating adds its hull on top of the current integrity.
-        status: {
-          ...s,
-          plating: true,
-          hull: s.hull + c.maxHull,
-          inventory: { scrap: inv.scrap - c.scrap, crystal: inv.crystal - c.crystal },
-        },
-        message: 'Reinforced plating installed',
-      };
-    }
+export function service(s: TankStatus, action: ServiceAction, repair: RepairTuning): ActionResult {
+  const stats = computeStats(s.levels);
+  if (action === 'refuel') {
+    if (s.fuel >= stats.maxFuel) return { ok: false, message: 'Fuel tank is already full' };
+    return { ok: true, status: { ...s, fuel: stats.maxFuel }, message: 'Refueled' };
   }
+  if (s.hull >= stats.maxHull) return { ok: false, message: 'Hull is already intact' };
+  if (s.inventory.scrap < repair.scrap) return { ok: false, message: `Need ${repair.scrap} scrap` };
+  return {
+    ok: true,
+    status: { ...s, hull: Math.min(stats.maxHull, s.hull + repair.hull), inventory: spend(s.inventory, { scrap: repair.scrap }) },
+    message: `Repaired +${repair.hull} hull`,
+  };
 }
 
-/** The current objective, shown in the HUD. */
-export function objectiveText(inv: Inventory, plating: boolean, t: WorkshopTuning): string {
-  if (plating) return 'Plating installed · explore freely';
-  const c = t.plating;
-  if (inv.scrap >= c.scrap && inv.crystal >= c.crystal) return 'Return to ship · craft plating';
-  return `Goal: plating · scrap ${Math.min(inv.scrap, c.scrap)}/${c.scrap} crystal ${Math.min(inv.crystal, c.crystal)}/${c.crystal}`;
+export type BuildCheck =
+  | { ok: true; tier: number; cost: Cost }
+  | { ok: false; reason: 'max' | 'locked' | 'cost'; message: string; tier?: number; cost?: Cost };
+
+/** Whether the next tier of a line can be built now, and why not. */
+export function checkBuild(levels: UpgradeLevels, inv: Inventory, id: UpgradeId): BuildCheck {
+  const def = upgradeDef(id);
+  const tier = levels[id];
+  if (tier >= def.tiers.length) return { ok: false, reason: 'max', message: 'Fully upgraded' };
+  if (def.requires && levels[def.requires.id] < def.requires.tier) {
+    const req = upgradeDef(def.requires.id);
+    return { ok: false, reason: 'locked', message: `Needs ${req.name} ${def.requires.tier}`, tier: tier + 1, cost: def.tiers[tier].cost };
+  }
+  const cost = def.tiers[tier].cost;
+  if (!canAfford(inv, cost)) return { ok: false, reason: 'cost', message: `Need ${costText(cost)}`, tier: tier + 1, cost };
+  return { ok: true, tier: tier + 1, cost };
+}
+
+export function build(s: TankStatus, id: UpgradeId): ActionResult {
+  const check = checkBuild(s.levels, s.inventory, id);
+  if (!check.ok) return { ok: false, message: check.message };
+  const before = computeStats(s.levels);
+  const levels = { ...s.levels, [id]: check.tier };
+  const after = computeStats(levels);
+  return {
+    ok: true,
+    // Extra hull and fuel capacity arrive filled.
+    status: {
+      levels,
+      inventory: spend(s.inventory, check.cost),
+      hull: s.hull + (after.maxHull - before.maxHull),
+      fuel: s.fuel + (after.maxFuel - before.maxFuel),
+    },
+    message: `${upgradeDef(id).name} ${check.tier} built`,
+  };
+}
+
+export function tiersBuilt(levels: UpgradeLevels): number {
+  return UPGRADES.reduce((n, u) => n + levels[u.id], 0);
+}
+
+export function linesMaxed(levels: UpgradeLevels): number {
+  return UPGRADES.filter((u) => levels[u.id] >= u.tiers.length).length;
+}
+
+export const TOTAL_TIERS = UPGRADES.reduce((n, u) => n + u.tiers.length, 0);
+
+/** The goal ladder shown in the HUD. */
+export function goalText(levels: UpgradeLevels): string {
+  const built = tiersBuilt(levels);
+  const maxed = linesMaxed(levels);
+  const top = Math.max(...UPGRADES.map((u) => levels[u.id]));
+  if (built === 0) return 'Goal: salvage and build an upgrade';
+  if (top < 2) return 'Goal: reach tier 2 in any upgrade';
+  if (built < 6) return `Goal: build 6 upgrade tiers · ${built}/6`;
+  if (maxed < 3) return `Goal: max out 3 upgrades · ${maxed}/3`;
+  if (built < TOTAL_TIERS) return `Goal: max everything · ${built}/${TOTAL_TIERS}`;
+  return 'Fully upgraded · explore freely';
 }

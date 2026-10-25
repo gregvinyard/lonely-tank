@@ -1,6 +1,6 @@
 import * as Phaser from 'phaser';
 import { TANK } from '../data/tuning';
-import { rotateToward, stepVelocity, type Vec2 } from '../systems/movement';
+import { rotateToward, stepVelocity, type DriveParams, type Vec2 } from '../systems/movement';
 
 // The player tank: one logical entity made of a physics-driven hull sprite
 // and a free-rotating turret sprite drawn on top. Both textures face +X.
@@ -39,12 +39,12 @@ export class Tank {
     return Math.hypot(this.body.velocity.x, this.body.velocity.y);
   }
 
-  /** input: raw directional input (-1..1 per axis). aim: world point to aim the turret at. */
-  update(input: Vec2, aim: Vec2, dtMs: number) {
+  /** input: raw directional input (-1..1 per axis). aim: world point to aim the turret at. drive: current (upgraded) speed and acceleration. */
+  update(input: Vec2, aim: Vec2, dtMs: number, drive: DriveParams = TANK) {
     const dt = dtMs / 1000;
 
     // Start from the body's actual velocity so collisions bleed off speed.
-    const vel = stepVelocity({ x: this.body.velocity.x, y: this.body.velocity.y }, input, dt, TANK);
+    const vel = stepVelocity({ x: this.body.velocity.x, y: this.body.velocity.y }, input, dt, drive);
     this.body.setVelocity(vel.x, vel.y);
 
     // Hull swings toward the direction we're asking to drive.
