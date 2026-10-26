@@ -17,6 +17,19 @@ Living notes on what's actually implemented and decided. The original spec is in
 - `render.maxTextures: 1` works around a Phaser 4.2.1 batching bug (see `src/main.ts`).
 - The HUD is a separate scene (`Hud`) drawn over the Game scene.
 
+## Ambiance
+
+- **Day and night:** a 15-minute day on play time (so it pauses with the game and carries on after a reload), starting a little after sunrise. Dawn violet, golden morning, white noon, golden hour, red sunset, blue night. Night keeps about 55% brightness so the game stays readable; `?time=` picks the starting hour.
+- **Light map** (`src/world/Atmosphere.ts`): a view-sized texture filled with the sky colour and multiplied over the world, with lamps added into it. A second texture adds halos for things that glow. Both are skipped when they'd do nothing (clear noon sky, no glows).
+- **Night lights:** the tank's headlight beam and glow, the ship's floodlights, bay light and blinking wingtip beacons, crystals, circuits, seeps, drone eyes, shells, muzzle flashes and explosions, and the strange plants (fungus trees, spires, the Monolith, glowing ground plants of the bloom, glass fields and mire).
+- **Light falls from the upper left**, as in all the art: drop shadows (a dark copy of the sprite) fall down and to the right, for the tank, the ship, rocks, props and landmarks. They fade by moonlight.
+- **Cloud shadows** drift over the ground with the wind.
+- **Rolling ground:** a slow height field lit from the upper left shades all open ground into swells and hollows, in dithered steps (`src/systems/relief.ts`). The home square gets it too (painted when the worker is idle).
+- **Wind:** a slowly swinging direction with lulls and gusts (`src/systems/sky.ts`). It carries each biome's drift (sand and grit, glass glints, glowing bloom spores, mire vapour, city ash), moves the clouds, and sets the wind sound's volume.
+- **Dust devils** wander over the flats and badlands by day; **glints** sparkle on lakes.
+- **Tread tracks** fade behind the tank over 14 seconds.
+- Purely visual: nothing in play changes at night.
+
 ## Tank (M1)
 
 All numbers live in `TANK` in `src/data/tuning.ts`.

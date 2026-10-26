@@ -2,13 +2,14 @@ import { BIOMES, MATERIAL_TILES, type BiomeId } from '../data/biomes';
 import { PLANET } from '../data/tuning';
 import { nearestSites, warp } from './biome';
 import { hash3, rand01, valueNoise } from './noise';
+import { quantize, reliefGrid, sampleRelief } from './relief';
 import { blobDepth, canyonDepth, featuresIn, type Blob, type Canyon, type Feature } from './terrain';
 
 // Paints one chunk of ground into an RGBA buffer: biome ground with dithered
-// borders, then mesas (top, cliff face, shadow), canyons (north wall, dark
-// depths) and lakes (foam, shallows, wet shore). Pure: the same inputs always
-// paint the same pixels, and the shapes match collision exactly because both
-// use the same distance functions.
+// borders, shaded into low swells (see relief.ts), then mesas (top, cliff
+// face, shadow), canyons (north wall, dark depths) and lakes (foam, shallows,
+// wet shore). Pure: the same inputs always paint the same pixels, and the
+// shapes match collision exactly because both use the same distance functions.
 
 export interface Material {
   w: number;
@@ -41,6 +42,10 @@ const mod = (a: number, n: number) => ((a % n) + n) % n;
 
 /** A deterministic per-pixel value in [0, 1). */
 const dither = (x: number, y: number) => rand01(SALT_DITHER, x >> 1, y >> 1);
+
+// An ordered dither, so the steps between relief levels read as drawn, not noisy.
+const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => (v + 0.5) / 16);
+const bayer = (x: number, y: number) => BAYER[(mod(y, 4) << 2) | mod(x, 4)];
 
 export function paintChunk(seed: number, cx: number, cy: number, features: readonly Feature[], m: Materials): Uint8ClampedArray {
   const out = new Uint8ClampedArray(SIZE * SIZE * 4);
@@ -114,6 +119,8 @@ export function paintChunk(seed: number, cx: number, cy: number, features: reado
     c[2] = t.data[i + 2] * k;
   };
 
+  const relief = reliefGrid(seed, x0, y0, SIZE);
+
   const blobs = features.filter((f): f is Blob => f.kind !== 'canyon');
   const canyons = features.filter((f): f is Canyon => f.kind === 'canyon');
   const H = PLANET.mesaHeight;
@@ -128,9 +135,10 @@ export function paintChunk(seed: number, cx: number, cy: number, features: reado
       const edge = blockEdge[k];
       if (edge < PLANET.biomeBlend && dither(x, y) < 0.5 * (1 - edge / PLANET.biomeBlend)) biome = blockOther[k];
       groundColor(biome, x, y);
-      let r = c[0];
-      let g = c[1];
-      let b = c[2];
+      const lit = quantize(sampleRelief(relief, SIZE, px, py), bayer(x, y));
+      let r = Math.min(255, c[0] * lit);
+      let g = Math.min(255, c[1] * lit);
+      let b = Math.min(255, c[2] * lit);
 
       for (const f of blobs) {
         if (x < f.box.x0 - 16 || x > f.box.x1 + 16 || y < f.box.y0 - 16 || y > f.box.y1 + 16) continue;

@@ -259,7 +259,11 @@ class SoundBoard {
    */
   setLoop(name: LoopName, level: number, rate = 1) {
     const v = this.loops.get(name) ?? { level: 0, rate: 1 };
-    v.level = Math.max(0, Math.min(1, level));
+    const next = Math.max(0, Math.min(1, level));
+    // Called every frame: only touch the audio graph for a real change, so the
+    // gain and rate automation timelines don't fill up with tiny steps.
+    if (v.src && Math.abs(next - v.level) < 0.01 && Math.abs(rate - v.rate) < 0.01) return;
+    v.level = next;
     v.rate = rate;
     this.loops.set(name, v);
     this.applyLoop(name);

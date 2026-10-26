@@ -54,6 +54,9 @@ test('cliffs, canyons and lakes stop the tank', async ({ page }) => {
 });
 
 test('the planet streams in and out without piling up objects', async ({ page }) => {
+  // 21 teleports, each waiting for fresh ground, and the home square repainting
+  // each lap: slow under software WebGL with the other tests running alongside.
+  test.setTimeout(60_000);
   const spots = [
     [-6000, 4000],
     [9000, -3000],
@@ -67,6 +70,8 @@ test('the planet streams in and out without piling up objects', async ({ page })
   const counts: number[] = [];
   for (let lap = 0; lap < 3; lap++) {
     for (const [x, y] of spots) await goTo(page, x, y);
+    // The home square's ground relief paints last, when the worker is free.
+    await page.waitForFunction(`${SCENE}.planet.settled`, null, { timeout: 10000 });
     await page.waitForTimeout(300);
     // Burrower trail mounds come and go on their own; count everything else.
     counts.push(await read<number>(page, `${SCENE}.children.list.filter((c) => c.texture?.key !== 'mound_trail').length + ${SCENE}.textures.getTextureKeys().length`));

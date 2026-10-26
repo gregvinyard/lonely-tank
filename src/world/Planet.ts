@@ -7,6 +7,7 @@ import { paintGroundChunk, type Material, type Materials } from '../systems/pain
 import type { Circle } from '../systems/steer';
 import { groundAt, type Feature, type GroundSample } from '../systems/terrain';
 import type { GroundReply, GroundRequest } from './groundWorker';
+import type { Shadows } from './Shadows';
 
 // Streams the planet in around the tank: for each chunk within loadRadius it
 // paints the ground (on a worker), places props with their collision, and
@@ -22,8 +23,13 @@ interface Loaded {
   content: ChunkContent;
   objects: Phaser.GameObjects.GameObject[];
   ground?: Phaser.GameObjects.Image;
+  /** Plain tiled sand shown on a home-square chunk until its ground is painted. */
+  sand?: Phaser.GameObjects.TileSprite;
   painting: boolean;
 }
+
+/** How tall each kind of prop stands, for its shadow (px). */
+const LIFT = { small: 2, medium: 3, large: 4, fungus: 6, spire: 7, ruin: 4, landmark: 6 } as const;
 
 /** Rock variant from the prop's random value: same art choice every time. */
 function rockFrame(u: number, count: number) {
@@ -35,6 +41,10 @@ export class Planet {
   private worker?: Worker;
   private materials!: Materials;
   private center = { cx: Number.NaN, cy: Number.NaN };
+  /** Paint jobs out with the worker. */
+  private sent = 0;
+  /** Home-square chunks waiting for their relief, painted only when nothing else is. */
+  private homeQueue: string[] = [];
   /** Impassable features of the loaded chunks (each once). */
   features: Feature[] = [];
   /** Collision circles of the loaded chunks' props. */
@@ -47,6 +57,7 @@ export class Planet {
     readonly seed: number,
     private readonly solids: Phaser.Physics.Arcade.StaticGroup,
     private readonly hooks: PlanetHooks,
+    private readonly shadows?: Shadows,
   ) {
     this.materials = readMaterials(scene);
     try {
@@ -117,20 +128,39 @@ export class Planet {
     const content = chunkContent(this.seed, cx, cy);
     const l: Loaded = { content, objects: [], painting: false };
     this.loaded.set(chunkKey(cx, cy), l);
-    if (!isHomeChunk(cx, cy)) {
-      if (paintNow || !this.worker) this.placeGround(l, paintGroundChunk(this.seed, cx, cy, this.materials));
-      else {
-        l.painting = true;
-        this.worker.postMessage({ type: 'paint', seed: this.seed, cx, cy } satisfies GroundRequest);
-      }
+    // The home square already has its sand (a tiling sprite), so its relief
+    // can wait until the worker is idle; elsewhere a teleport needs ground right away.
+    if (isHomeChunk(cx, cy) && this.worker) {
+      const s = PLANET.chunkSize;
+      l.sand = this.scene.add.tileSprite(cx * s, cy * s, s, s, 'terrain').setOrigin(0, 0).setDepth(0).setTilePosition(cx * s, cy * s);
+      this.homeQueue.push(chunkKey(cx, cy));
     }
+    else if (paintNow || !this.worker) this.placeGround(l, paintGroundChunk(this.seed, cx, cy, this.materials));
+    else this.send(l);
+    this.pumpHome();
     this.buildProps(l);
     this.hooks.onLoad(content);
+  }
+
+  private send(l: Loaded) {
+    l.painting = true;
+    this.sent++;
+    this.worker!.postMessage({ type: 'paint', seed: this.seed, cx: l.content.cx, cy: l.content.cy } satisfies GroundRequest);
+  }
+
+  /** Sends the next home-square chunk still loaded, if the worker has nothing else to do. */
+  private pumpHome() {
+    while (this.worker && this.sent === 0 && this.homeQueue.length > 0) {
+      const l = this.loaded.get(this.homeQueue.shift()!);
+      if (l && !l.ground && !l.painting) this.send(l);
+    }
   }
 
   private dropWorker() {
     this.worker?.terminate();
     this.worker = undefined;
+    this.sent = 0;
+    this.homeQueue = []; // the home square keeps its plain sand
     for (const l of this.loaded.values()) {
       if (!l.painting) continue;
       l.painting = false;
@@ -139,11 +169,13 @@ export class Planet {
   }
 
   private onPainted(r: GroundReply) {
-    if (r.seed !== this.seed) return;
-    const l = this.loaded.get(chunkKey(r.cx, r.cy));
-    if (!l || l.ground) return;
-    l.painting = false;
-    this.placeGround(l, r.pixels);
+    this.sent = Math.max(0, this.sent - 1);
+    const l = r.seed === this.seed ? this.loaded.get(chunkKey(r.cx, r.cy)) : undefined;
+    if (l && !l.ground) {
+      l.painting = false;
+      this.placeGround(l, r.pixels);
+    }
+    this.pumpHome();
   }
 
   private placeGround(l: Loaded, pixels: Uint8ClampedArray) {
@@ -155,6 +187,8 @@ export class Planet {
     tex.getContext().putImageData(new ImageData(new Uint8ClampedArray(pixels.buffer as ArrayBuffer, pixels.byteOffset, pixels.length), s, s), 0, 0);
     tex.refresh();
     l.ground = this.scene.add.image(cx * s, cy * s, key).setOrigin(0, 0).setDepth(0);
+    l.sand?.destroy();
+    l.sand = undefined;
   }
 
   private buildProps(l: Loaded) {
@@ -174,6 +208,7 @@ export class Planet {
       }
       img.setFlipX(p.flip);
       l.objects.push(img);
+      if (this.shadows) l.objects.push(this.shadows.cast(img, LIFT[p.family === 'rock' ? p.size! : p.family]));
       for (const circle of p.circles) {
         const part = this.solids.create(circle.x, circle.y, '__DEFAULT') as Phaser.Physics.Arcade.Image;
         part.setVisible(false);
@@ -192,6 +227,8 @@ export class Planet {
   private unload(l: Loaded) {
     for (const o of l.objects) o.destroy();
     l.objects = [];
+    l.sand?.destroy();
+    l.sand = undefined;
     if (l.ground) {
       const key = l.ground.texture.key;
       l.ground.destroy();
@@ -217,10 +254,15 @@ export class Planet {
     return [...this.loaded.values()].every((l) => isHomeChunk(l.content.cx, l.content.cy) || !!l.ground);
   }
 
+  /** Every loaded chunk painted, home square included, and the worker idle. */
+  get settled() {
+    return this.groundReady && this.sent === 0 && this.homeQueue.length === 0;
+  }
+
   /** Game objects the planet currently holds (for leak checks). */
   get objectCount() {
     let n = 0;
-    for (const l of this.loaded.values()) n += l.objects.length + (l.ground ? 1 : 0);
+    for (const l of this.loaded.values()) n += l.objects.length + (l.ground ? 1 : 0) + (l.sand ? 1 : 0);
     return n;
   }
 

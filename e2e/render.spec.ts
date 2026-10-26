@@ -44,7 +44,8 @@ test('turret renders completely over the hull while driving', async ({ page }) =
     for (const k of pose.keys) await page.keyboard.down(k);
     await page.waitForTimeout(800);
     // Pause the scene and the camera's follow smoothing (which runs even while paused).
-    await page.evaluate(`${game}.scene.pause('Game'); ${game}.scene.getScene('Game').cameras.main.stopFollow()`);
+    // (`void`: stopFollow returns the camera, and serialising that whole object graph back takes seconds.)
+    await page.evaluate(`${game}.scene.pause('Game'); void ${game}.scene.getScene('Game').cameras.main.stopFollow()`);
     await page.waitForTimeout(80);
 
     const [sx, sy] = (await page.evaluate(`(() => {

@@ -183,6 +183,17 @@ Developer feedback: good; rocks needed size variety and jiggled while moving (fi
 
 **Verified:** typecheck ✅, 156 unit tests ✅ (adds: every sound file exists), 64 browser tests ✅ (adds: every sound file loads and decodes with no 404s). Loop levels checked in a browser across title, idle, driving and pause. Not yet listened to.
 
+## Ambiance
+
+- **Day and night:** a 15-minute cycle on play time with dawn, golden hour, sunset and a blue night (still readable). Night brings out lights: a headlight beam, the ship's floodlights and blinking beacons, glowing crystals, seeps, drone eyes, fungus, spires and plants, and flashes from the cannon and explosions.
+- **Shadows:** the tank, ship, rocks, props and landmarks cast drop shadows, faint by moonlight. Cloud shadows drift across the land with the wind.
+- **Rolling ground:** every biome's open ground, the home square included, is shaded into low dunes and hollows.
+- **Wind:** gusts and lulls. Each biome has its own drift: blowing sand, glass glints, glowing spores, mire vapour, ash. Dust devils wander the flats; lakes sparkle. The wind sound rises in the gusts. The title screen has blowing sand too.
+- **Tread tracks** trail behind the tank and fade.
+- `?time=0.9` starts the day at a chosen hour.
+
+**Verified:** typecheck ✅, 166 unit tests ✅ (adds: the day's light stays smooth, in range and readable at night; wind range and gusts; ground relief matches across chunk edges), 68 browser tests ✅ (adds: night darkens the world but stays readable, `?time=`, tracks, shadows, drift and dust devils, shadows torn down with their chunks). Browser tests now run four at a time (software WebGL is CPU-bound; more at once only made timing tests flaky).
+
 ## Next
 
 - Developer playtest of v0.6, the title screen and the sounds.

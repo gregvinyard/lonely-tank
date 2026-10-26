@@ -17,11 +17,11 @@ import {
   TANK,
   WORKSHOP,
   WORLD_SEED,
-  WORLD_SIZE,
   frameLerp,
 } from '../data/tuning';
 import { sfx, type SfxName } from '../audio/sfx';
 import { ROCK_VARIANTS } from '../data/assets';
+import { FLORA_FRAMES } from '../data/propShapes';
 import { noUpgrades, type UpgradeId, type UpgradeLevels } from '../data/upgrades';
 import { Burrower } from '../entities/Burrower';
 import { Drone } from '../entities/Drone';
@@ -43,7 +43,12 @@ import { BIOMES, type BiomeId } from '../data/biomes';
 import { biomeAt } from '../systems/biome';
 import { chunkContent, chunkKey, chunkOf, chunkOfId, type ChunkContent, type FuelSeep, type Landmark } from '../systems/chunks';
 import { pushOut } from '../systems/terrain';
+import { DAY_START, dayPhase, skyAt, windAt, type Wind } from '../systems/sky';
 import { Planet } from '../world/Planet';
+import { Atmosphere, type Light } from '../world/Atmosphere';
+import { Motes } from '../world/Motes';
+import { Shadows } from '../world/Shadows';
+import { Tracks } from '../world/Tracks';
 
 type Keys = Record<'up' | 'down' | 'left' | 'right' | 'interact' | 'one' | 'two' | 'solar', Phaser.Input.Keyboard.Key>;
 
@@ -56,6 +61,12 @@ const MAX_FRAME_MS = 250;
 const BUMP_SPEED = 70;
 /** A drone locking on is heard within this distance (px). */
 const ALERT_HEAR = 520;
+/** Ground plants that glow after dark: the bloom's puffballs, the glass fields' shards, the mire's bubbles. */
+const DECOR_GLOW = new Map<number, number>([
+  ...FLORA_FRAMES.bloom.map((f) => [f, 0xb070ff] as [number, number]),
+  ...FLORA_FRAMES.glass.map((f) => [f, 0x80f0ff] as [number, number]),
+  ...FLORA_FRAMES.mire.map((f) => [f, 0x9cff6a] as [number, number]),
+]);
 const PICKUP_SFX: Record<ResourceKind, SfxName> = { scrap: 'pickupScrap', crystal: 'pickupCrystal', circuit: 'pickupCircuit' };
 
 /** Emitted on game.events when the player salvages a node. */
@@ -146,6 +157,15 @@ export class GameScene extends Phaser.Scene {
   workshopOpen = false;
 
   private keys!: Keys;
+  shadows!: Shadows;
+  tracks!: Tracks;
+  atmosphere!: Atmosphere;
+  motes!: Motes;
+  /** Pins the time of day (0 = midnight, 0.5 = noon), for tests and screenshots. */
+  phaseOverride?: number;
+  /** Where in the day a new game begins (?time=0.9 starts at night). */
+  private dayStart = DAY_START;
+  wind!: Wind;
   private dust!: Phaser.GameObjects.Particles.ParticleEmitter;
   private sparks!: Phaser.GameObjects.Particles.ParticleEmitter;
   private smoke!: Phaser.GameObjects.Particles.ParticleEmitter;
@@ -236,8 +256,9 @@ export class GameScene extends Phaser.Scene {
 
     const B = PLANET.bounds;
     this.physics.world.setBounds(B.min, B.min, B.max - B.min, B.max - B.min);
-    this.add.tileSprite(0, 0, WORLD_SIZE, WORLD_SIZE, 'terrain').setOrigin(0, 0);
 
+    this.shadows = new Shadows(this);
+    this.tracks = new Tracks(this);
     const solids = this.physics.add.staticGroup();
     for (const r of this.world.rocks) {
       // The lighting is baked in, so vary rocks by variant and mirroring, not rotation.
@@ -245,6 +266,7 @@ export class GameScene extends Phaser.Scene {
       const v = rockVariant(r.angle, keys.length);
       const rock = solids.create(r.x, r.y, keys[v.index]) as Phaser.Physics.Arcade.Image;
       rock.setFlipX(v.flip).setDepth(5);
+      this.shadows.cast(rock, { small: 2, medium: 3, large: 4 }[r.size]);
       setCircleBody(rock, OBSTACLES.sizes[r.size].radius);
     }
     // Scorched crash site under the ship.
@@ -252,7 +274,7 @@ export class GameScene extends Phaser.Scene {
     this.add.ellipse(center.x + 20, center.y - 10, 250, 180, 0x2a1a14, 0.25).setDepth(1);
     // The ship draws over the tank, so a tank rolling through the door
     // disappears into the dark hold. Its hull is a set of invisible circles.
-    this.add.image(center.x, center.y, 'spaceship').setDepth(11.5);
+    this.shadows.cast(this.add.image(center.x, center.y, 'spaceship').setDepth(11.5), 9);
     for (const c of hullAt(center, SHIP.layout)) {
       const part = solids.create(c.x, c.y, '__DEFAULT') as Phaser.Physics.Arcade.Image;
       part.setVisible(false);
@@ -305,6 +327,8 @@ export class GameScene extends Phaser.Scene {
       this.fuel = t.fuel;
     }
     this.tank = new Tank(this, start.x, start.y);
+    // Only the hull casts one: the turret sits on top of it.
+    this.shadows.follow(this.tank.hull, 3);
     // Solar panels tuck under the tank (drawn below the hull) and slide out sideways.
     this.panels = [0, 1].map((i) => this.add.image(0, 0, 'solar_panel').setFlipY(i === 1).setDepth(9.5).setVisible(false));
     // Teleporting the tank (rescue, tests) cancels any trip through the door and folds the panels.
@@ -339,7 +363,7 @@ export class GameScene extends Phaser.Scene {
     this.planet = new Planet(this, this.world.seed, solids, {
       onLoad: (c) => this.onChunkLoad(c),
       onUnload: (c) => this.onChunkUnload(c),
-    });
+    }, this.shadows);
     this.planet.update(start.x, start.y, true);
     // A tank saved somewhere that is now impassable is moved to open ground.
     const free = pushOut(this.planet.features, start.x, start.y, TANK.bodyRadius + 2);
@@ -351,6 +375,13 @@ export class GameScene extends Phaser.Scene {
     cam.setBounds(B.min, B.min, B.max - B.min, B.max - B.min);
     cam.centerOn(start.x, start.y);
     cam.startFollow(this.tank.hull, true, CAMERA.lerp, CAMERA.lerp);
+
+    const time = Number(new URLSearchParams(location.search).get('time'));
+    this.dayStart = Number.isFinite(time) && new URLSearchParams(location.search).has('time') ? time : DAY_START;
+    this.phaseOverride = undefined;
+    this.wind = windAt(this.playTimeMs / 1000);
+    this.atmosphere = new Atmosphere(this, (add) => this.nightLights(add));
+    this.motes = new Motes(this);
 
     const kb = this.input.keyboard!;
     this.keys = kb.addKeys({
@@ -430,6 +461,20 @@ export class GameScene extends Phaser.Scene {
     const l = frameLerp(CAMERA.lerp, delta);
     this.cameras.main.setLerp(l, l);
     this.emitDust(delta);
+    this.tracks.update(this.tank.x, this.tank.y, this.tank.hull.rotation, time, outside);
+    const sky = skyAt(this.phaseOverride ?? dayPhase(this.playTimeMs, this.dayStart));
+    this.wind = windAt(this.playTimeMs / 1000);
+    this.atmosphere.update(sky, this.wind, delta);
+    const seed = this.world.seed;
+    this.motes.update(delta, {
+      wind: this.wind,
+      night: sky.night,
+      biomeAt: (x, y) => biomeAt(seed, x, y).biome,
+      liquidAt: (x, y) => this.planet.ground(x, y).kind === 'liquid',
+      // Dust devils keep to open ground, away from the ship.
+      openAt: (x, y) => this.planet.ground(x, y).kind === 'open' && Math.hypot(x - this.world.center.x, y - this.world.center.y) > 320,
+    });
+    this.shadows.setStrength(sky.shadow);
 
     const power = stepPower(
       { fuel: this.fuel, battery: this.battery },
@@ -660,11 +705,50 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** The motor hums at rest and whines up with speed; the wind drops inside the ship. */
+  /** What glows after dark: the tank's lamps, the ship, crystals, seeps, drones, shells and the stranger plants. */
+  private nightLights(add: (l: Light) => void) {
+    const t = this.tank;
+    const c = this.world.center;
+    const now = this.time.now;
+    add({ x: t.x, y: t.y, radius: 52, color: 0xffd9a0, intensity: 0.45 });
+    if (this.shipState === 'outside' && t.hull.visible) {
+      const a = t.hull.rotation;
+      add({ x: t.x + Math.cos(a) * 14, y: t.y + Math.sin(a) * 14, radius: 220, color: 0xfff2d0, intensity: 0.95, beam: a, glow: 0.12 });
+    }
+    add({ x: c.x, y: c.y, radius: 200, color: 0x9fc4ff, intensity: 0.3 });
+    add({ x: c.x, y: c.y + 105, radius: 70, color: 0xffb070, intensity: 0.8 * Math.max(0.35, this.doorOpen), glow: 0.25 });
+    add({ x: c.x, y: c.y + 160, radius: 90, color: 0xffe2b0, intensity: 0.35 });
+    // Wingtip beacons, blinking in turn, and a steady one on the nose.
+    add({ x: c.x - 114, y: c.y + 28, radius: 26, color: 0xff4040, intensity: now % 2000 < 260 ? 1 : 0.15, glow: 0.8 });
+    add({ x: c.x + 114, y: c.y + 28, radius: 26, color: 0x40ff70, intensity: (now + 1000) % 2000 < 260 ? 1 : 0.15, glow: 0.8 });
+    add({ x: c.x, y: c.y - 108, radius: 22, color: 0xffffff, intensity: 0.6, glow: 0.4 });
+    for (const { node, sprite } of this.resources.values()) {
+      if (!sprite.visible) continue;
+      if (node.kind === 'crystal') add({ x: node.x, y: node.y, radius: 32, color: 0xb488ff, intensity: 0.85, glow: 0.45 });
+      else if (node.kind === 'circuit') add({ x: node.x, y: node.y, radius: 20, color: 0x5cffb0, intensity: 0.6, glow: 0.35 });
+    }
+    for (const { seep } of this.seeps.values()) add({ x: seep.x, y: seep.y, radius: 30, color: 0x8dff6a, intensity: 0.6, glow: 0.35 });
+    for (const d of this.drones.values()) add({ x: d.x, y: d.y, radius: 24, color: 0xff4040, intensity: d.brain.mode === 'chase' ? 1 : 0.6, glow: 0.5 });
+    for (const sh of this.shells.getChildren() as Phaser.Physics.Arcade.Image[]) add({ x: sh.x, y: sh.y, radius: 16, color: 0xffb050, intensity: 0.9, glow: 0.6 });
+    for (const content of this.planet.contents()) {
+      for (const p of content.props) {
+        if (p.family === 'fungus') add({ x: p.x, y: p.y, radius: 50, color: 0xa070ff, intensity: 0.6, glow: 0.4 });
+        else if (p.family === 'spire') add({ x: p.x, y: p.y, radius: 36, color: 0x80f0ff, intensity: 0.45, glow: 0.3 });
+        else if (p.family === 'landmark' && p.frame === 2) add({ x: p.x, y: p.y, radius: 90, color: 0x7fffd4, intensity: 0.55, glow: 0.3 });
+      }
+      for (const d of content.decor) {
+        const color = DECOR_GLOW.get(d.frame);
+        if (color !== undefined) add({ x: d.x, y: d.y, radius: 22, color, intensity: 0.5, glow: 0.45 });
+      }
+    }
+  }
+
   private updateLoops(outside: boolean, maxSpeed: number) {
     const throttle = Math.min(1, this.tank.speed / maxSpeed);
     const running = outside && !this.workshopOpen && this.battery > 0;
     sfx.setLoop('engine', running ? 0.15 + 0.85 * throttle : 0, 0.8 + 0.35 * throttle);
-    sfx.setLoop('wind', outside ? 1 : 0.3);
+    // Louder in the gusts.
+    sfx.setLoop('wind', (outside ? 1 : 0.3) * (0.6 + 0.6 * this.wind.gust));
   }
 
   /** F: put the solar panels out (only when stopped, out in the open), or away again. */
@@ -1089,6 +1173,7 @@ export class GameScene extends Phaser.Scene {
     body.setVelocity(Math.cos(a) * CANNON.speed, Math.sin(a) * CANNON.speed);
 
     const flash = this.add.image(mx, my, 'flash').setDepth(13);
+    this.atmosphere.flash(mx, my, 70, 0xffc878, 160);
     this.time.delayedCall(50, () => flash.destroy());
     this.tank.recoil();
     sfx.play('fire');
@@ -1096,6 +1181,7 @@ export class GameScene extends Phaser.Scene {
 
   private impact(shell: Phaser.Physics.Arcade.Image) {
     this.sparks.explode(5, shell.x, shell.y);
+    this.atmosphere.flash(shell.x, shell.y, 36, 0xffa050, 160);
     sfx.play('impact');
     shell.destroy();
   }
@@ -1119,6 +1205,7 @@ export class GameScene extends Phaser.Scene {
     drone.destroy();
 
     this.sparks.explode(18, x, y);
+    this.atmosphere.flash(x, y, 150, 0xffa040, 700);
     for (let i = 0; i < 6; i++) this.dust.emitParticleAt(x + Phaser.Math.Between(-8, 8), y + Phaser.Math.Between(-8, 8), 1);
     this.cameras.main.shake(120, 0.004);
     sfx.play('explode');

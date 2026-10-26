@@ -1,5 +1,7 @@
 import * as Phaser from 'phaser';
 import { sfx } from '../audio/sfx';
+import { windAt } from '../systems/sky';
+import { Motes } from '../world/Motes';
 import { SAVE } from '../data/tuning';
 import { keyOnce } from '../input/keyOnce';
 import { browserStorage, clearSave, loadSave } from '../systems/save';
@@ -24,6 +26,8 @@ export class TitleScene extends Phaser.Scene {
   private confirmFocus = 0;
   private leaving = false;
   private layer!: Phaser.GameObjects.Container;
+  private bg?: Phaser.GameObjects.Image;
+  private motes!: Motes;
 
   constructor() {
     super('Title');
@@ -32,6 +36,8 @@ export class TitleScene extends Phaser.Scene {
   create() {
     this.leaving = false;
     this.confirm = undefined;
+    // Sand blowing across the backdrop, behind the logo and menu.
+    this.motes = new Motes(this, -1);
     const storage = browserStorage();
     const save = storage && loadSave(storage, SAVE.key);
     this.hasSave = !!save;
@@ -57,6 +63,10 @@ export class TitleScene extends Phaser.Scene {
     this.cameras.main.fadeIn(400, 0, 0, 0);
   }
 
+  update(time: number, delta: number) {
+    this.motes.update(delta, { wind: windAt(time / 1000), night: 0, biomeAt: () => 'flats' });
+  }
+
   /** Continue the saved game, or (after asking, if there is one) start a new one. */
   choose(id: Choice) {
     if (this.leaving) return;
@@ -79,15 +89,15 @@ export class TitleScene extends Phaser.Scene {
 
   private layout() {
     this.layer?.destroy();
+    this.bg?.destroy();
     this.buttons = [];
     const { width: W, height: H } = this.scale;
     this.layer = this.add.container(0, 0);
 
     // Backdrop: scaled by a whole number to cover the screen, anchored to the bottom.
-    const bg = this.add.image(0, 0, 'title_bg');
+    const bg = (this.bg = this.add.image(0, 0, 'title_bg').setDepth(-2));
     const s = Math.max(1, Math.ceil(Math.max(W / bg.width, H / bg.height)));
     bg.setScale(s).setOrigin(0.5, 1).setPosition(Math.round(W / 2), H);
-    this.layer.add(bg);
 
     // The logo: 2x where it fits with the menu below it.
     const logo = this.add.image(0, 0, 'title_logo').setOrigin(0, 0);
