@@ -1104,7 +1104,7 @@ export class GameScene extends Phaser.Scene {
       glow = this.add.image(node.x, node.y, 'glow').setDepth(2);
       this.tweens.add({ targets: glow, alpha: 0.35, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
     }
-    const sprite = this.add.image(node.x, node.y, node.kind).setRotation(node.angle).setDepth(4);
+    const sprite = this.add.image(node.x, node.y, node.kind).setDepth(4); // upright: the art has a top and bottom
     this.resources.set(node.id, { node, sprite, glow });
     if (fadeIn) {
       sprite.setAlpha(0);

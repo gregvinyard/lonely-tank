@@ -10,6 +10,7 @@ import { RESOURCE_KINDS } from '../systems/resources';
 import { goalText } from '../systems/workshop';
 import { RESOURCE_ICON, WorkshopPanel } from '../ui/WorkshopPanel';
 import { MapPanel } from '../ui/MapPanel';
+import { Reticle } from '../ui/Reticle';
 import { Bar, Plate, UI_TEXT, centerOn, frame, label } from '../ui/widgets';
 import {
   COLLECTED_EVENT,
@@ -87,6 +88,8 @@ export class HudScene extends Phaser.Scene {
     super('Hud');
   }
 
+  private reticle!: Reticle;
+
   create() {
     this.game_ = this.scene.get('Game') as GameScene;
     this.shownHull = -1;
@@ -95,6 +98,7 @@ export class HudScene extends Phaser.Scene {
     this.mapOpen = false;
 
     this.createStatsPanel();
+    this.reticle = new Reticle(this);
     this.goal = new Plate(this, '', { tint: COLOR.dim });
 
     this.prompt = new Plate(this, '', { minHeight: 17 }).setVisible(false);
@@ -156,6 +160,7 @@ export class HudScene extends Phaser.Scene {
   }
 
   update() {
+    this.reticle.update();
     const g = this.game_;
     const { width, height } = this.scale;
 

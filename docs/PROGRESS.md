@@ -194,6 +194,13 @@ Developer feedback: good; rocks needed size variety and jiggled while moving (fi
 
 **Verified:** typecheck ✅, 166 unit tests ✅ (adds: the day's light stays smooth, in range and readable at night; wind range and gusts; ground relief matches across chunk edges), 68 browser tests ✅ (adds: night darkens the world but stays readable, `?time=`, tracks, shadows, drift and dust devils, shadows torn down with their chunks). Browser tests now run four at a time (software WebGL is CPU-bound; more at once only made timing tests flaky).
 
+## Fixes after the ambiance pass
+
+- Scrap, crystals and circuits sit upright (no random rotation); the art has a top and bottom.
+- In play, the mouse cursor is a pixel-art aiming reticle (ring, ticks, centre dot, dark outline) on the game's pixel grid. The title screen keeps the normal arrow.
+
+**Verified:** typecheck ✅, 166 unit tests ✅, 68 browser tests ✅.
+
 ## Next
 
 - Developer playtest of v0.6, the title screen and the sounds.
