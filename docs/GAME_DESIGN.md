@@ -95,7 +95,7 @@ Numbers live in `FUEL`, `WORKSHOP` and `SAVE` in `src/data/tuning.ts`.
 - **Rock sizes:** small (collision radius 12), medium (22), large (36), weighted 30/40/30. Sizes are assigned after placement (seed + 4) and a rock without room for its size (10 px clear of other rocks, resources, drone homes and the spawn) is made smaller, so positions and resource ids are unchanged and saves stay valid.
 - **Whole-pixel positions:** rocks, resources and drone homes are rounded to whole pixels at generation. Fractional positions rounded to the screen grid at different moments than the ground as the camera moved, so rocks visibly jiggled.
 - **Feedback:** turret recoil (3 px, whole pixels), a red flash on the tank when hit, dark smoke while hull is at or below 30%.
-- **Sound:** synthesized effects (see `ART_REQUESTS.md`); M mutes and is remembered.
+- **Sound:** Mirelo-generated samples for every event, a motor loop that follows speed and a wind loop (see `ART_REQUESTS.md`); synthesized blips stand in until they load. M mutes and is remembered.
 - **Pause:** Esc or P pauses the game (drones, fuel, autosave timer all stop) and shows the full controls list. With the workshop open, Esc only closes it.
 - **Warnings:** outside the ship, "Low fuel · return to ship" or "Hull critical · repair at ship" appears at the top of the screen.
 - **Hint bar:** shortened; fades after 45 s (the pause screen keeps the full list).

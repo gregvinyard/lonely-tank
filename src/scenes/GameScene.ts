@@ -20,7 +20,7 @@ import {
   WORLD_SIZE,
   frameLerp,
 } from '../data/tuning';
-import { sfx } from '../audio/sfx';
+import { sfx, type SfxName } from '../audio/sfx';
 import { ROCK_VARIANTS } from '../data/assets';
 import { noUpgrades, type UpgradeId, type UpgradeLevels } from '../data/upgrades';
 import { Burrower } from '../entities/Burrower';
@@ -52,6 +52,11 @@ export type SolarState = 'stowed' | 'deploying' | 'out' | 'folding';
 
 /** Longest frame counted toward play time, so a tab coming back from the background doesn't jump the clock. */
 const MAX_FRAME_MS = 250;
+/** Hitting something faster than this (px/s) scrapes. */
+const BUMP_SPEED = 70;
+/** A drone locking on is heard within this distance (px). */
+const ALERT_HEAR = 520;
+const PICKUP_SFX: Record<ResourceKind, SfxName> = { scrap: 'pickupScrap', crystal: 'pickupCrystal', circuit: 'pickupCircuit' };
 
 /** Emitted on game.events when the player salvages a node. */
 export const COLLECTED_EVENT = 'resource-collected';
@@ -307,7 +312,11 @@ export class GameScene extends Phaser.Scene {
       this.leaveShipNow();
       this.foldSolarNow();
     };
-    this.physics.add.collider(this.tank.hull, solids);
+    // Hitting a rock or prop at speed scrapes (checked before the bodies are separated).
+    this.physics.add.collider(this.tank.hull, solids, undefined, () => {
+      if (this.tank.speed > BUMP_SPEED) sfx.play('bump');
+      return true;
+    });
 
     this.homeRockCircles = this.world.rocks.map((r) => ({ x: r.x, y: r.y, r: OBSTACLES.sizes[r.size].radius }));
     for (const p of this.world.burrowers) if (!this.destroyed.has(p.id)) this.burrowers.set(p.id, new Burrower(this, p, this.dust));
@@ -368,6 +377,7 @@ export class GameScene extends Phaser.Scene {
     document.addEventListener('visibilitychange', onHide);
     window.addEventListener('pagehide', onPageHide);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      sfx.setLoop('engine', 0);
       document.removeEventListener('visibilitychange', onHide);
       window.removeEventListener('pagehide', onPageHide);
     });
@@ -413,6 +423,7 @@ export class GameScene extends Phaser.Scene {
     if (!pointer.leftButtonDown()) this.holdFire = false;
     const firing = pointer.leftButtonDown() && outside && !this.holdFire;
     if (firing && canFire(time, this.lastFired, st.cooldownMs)) this.fire(time);
+    this.updateLoops(outside, st.maxSpeed);
 
     // Camera lerp is applied once per frame; scale it so the follow feels the
     // same at 60 Hz and 144 Hz.
@@ -446,7 +457,9 @@ export class GameScene extends Phaser.Scene {
     for (const d of this.drones.values()) {
       // Each drone only steers round what's near it.
       const near = obstacles.filter((o) => Math.abs(o.x - d.x) < 360 && Math.abs(o.y - d.y) < 360);
+      const wasChasing = d.brain.mode === 'chase';
       d.update(time, delta, this.tank, this.inShip, near);
+      if (!wasChasing && d.brain.mode === 'chase' && Math.hypot(d.x - this.tank.x, d.y - this.tank.y) < ALERT_HEAR) sfx.play('alert');
     }
 
     this.updateBurrowers(delta);
@@ -481,6 +494,7 @@ export class GameScene extends Phaser.Scene {
     const nx = push.x / len;
     const ny = push.y / len;
     const into = body.velocity.x * nx + body.velocity.y * ny;
+    if (into < -BUMP_SPEED) sfx.play('bump');
     if (into < 0) body.velocity.set(body.velocity.x - into * nx, body.velocity.y - into * ny);
   }
 
@@ -512,13 +526,14 @@ export class GameScene extends Phaser.Scene {
       const first = !this.discovered.has(id);
       this.discovered.add(id);
       const def = BIOMES[biome];
+      if (first) sfx.play('discoverBiome');
       this.game.events.emit(DISCOVERY_EVENT, { type: 'biome', title: def.name, subtitle: def.blurb, first } satisfies DiscoveryPayload);
     }
     for (const c of this.planet.contents()) {
       for (const lm of c.landmarks) {
         if (this.discovered.has(lm.id) || Math.hypot(t.x - lm.x, t.y - lm.y) > PLANET.discoverRadius) continue;
         this.discovered.add(lm.id);
-        sfx.play('ok');
+        sfx.play('discoverLandmark');
         this.game.events.emit(DISCOVERY_EVENT, { type: 'landmark', title: lm.name, subtitle: 'Landmark found', first: true } satisfies DiscoveryPayload);
       }
     }
@@ -595,7 +610,7 @@ export class GameScene extends Phaser.Scene {
     this.nearbySeep = undefined;
     const before = this.fuel;
     this.fuel = Math.min(this.maxFuel, this.fuel + seep.amount);
-    sfx.play('pickup');
+    sfx.play('siphon');
     this.tweens.add({ targets: entry.sprite, alpha: 0, duration: 400, onComplete: () => entry.sprite.destroy() });
     this.game.events.emit(SIPHON_EVENT, { amount: Math.round(this.fuel - before) });
   }
@@ -642,6 +657,14 @@ export class GameScene extends Phaser.Scene {
       this.shipSmokeMs = 0;
       this.smoke.emitParticleAt(c.x + 64 + Phaser.Math.Between(-3, 3), c.y + 112, 1);
     }
+  }
+
+  /** The motor hums at rest and whines up with speed; the wind drops inside the ship. */
+  private updateLoops(outside: boolean, maxSpeed: number) {
+    const throttle = Math.min(1, this.tank.speed / maxSpeed);
+    const running = outside && !this.workshopOpen && this.battery > 0;
+    sfx.setLoop('engine', running ? 0.15 + 0.85 * throttle : 0, 0.8 + 0.35 * throttle);
+    sfx.setLoop('wind', outside ? 1 : 0.3);
   }
 
   /** F: put the solar panels out (only when stopped, out in the open), or away again. */
@@ -847,7 +870,7 @@ export class GameScene extends Phaser.Scene {
     this.sparks.explode(14, x, y);
     for (let i = 0; i < 8; i++) this.dust.emitParticleAt(x + Phaser.Math.Between(-10, 10), y + Phaser.Math.Between(-8, 8), 1);
     this.cameras.main.shake(120, 0.004);
-    sfx.play('explode');
+    sfx.play('burrowerDie');
 
     // Burrowers live on crystal; one-off drop like a drone's.
     const kill = `${p.id}@${Math.round(this.playTimeMs)}`;
@@ -870,7 +893,7 @@ export class GameScene extends Phaser.Scene {
   workshopService(action: ServiceAction) {
     const result = service(this.status, action, WORKSHOP.repair);
     this.applyResult(result);
-    sfx.play(result.ok ? 'ok' : 'deny');
+    sfx.play(result.ok ? action : 'deny');
     this.game.events.emit(WORKSHOP_EVENT, { action, ok: result.ok, message: result.message } satisfies WorkshopPayload);
   }
 
@@ -1026,7 +1049,7 @@ export class GameScene extends Phaser.Scene {
     if (!node.dropped) this.collected.set(node.id, this.playTimeMs);
     this.nearby = undefined;
     this.inventory = addResource(this.inventory, node.kind, node.amount);
-    sfx.play('pickup');
+    sfx.play(PICKUP_SFX[node.kind]);
 
     if (entry.glow) {
       this.tweens.killTweensOf(entry.glow);

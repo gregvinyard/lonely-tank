@@ -181,6 +181,50 @@ Frames (`ui_panel`, `ui_plate`, `ui_button*`, `ui_bar`) and 9×9 HUD icons (`ico
 
 ## Sound
 
-All sound effects are synthesized in code with WebAudio (`src/audio/sfx.ts`): no audio files. Fire, shell impact, drone hit, explosion, tank hit, pickup, workshop open/ok/deny/craft, rescue, low-fuel beep. M toggles mute (remembered in `localStorage` under `lonely-tank.muted`).
+Sound effects are samples generated with **Mirelo** (`text_to_sfx`), played through WebAudio by `src/audio/sfx.ts`. Files are in `public/assets/sfx/`. Until a file has loaded (or if one fails), the old synthesized blip plays where there is one. M toggles mute (remembered in `localStorage` under `lonely-tank.muted`).
 
-Generations used so far: 217 of 2000 this cycle.
+Processing (scratchpad script, recorded here):
+- **One-shots:** trimmed to 3 ms before the first sound and 40 ms past the last (with a fade), peak-normalised to −1 dB, then mp3 at 96 kbps mono. Levels are balanced in code by the `gain` in `SAMPLES`.
+- **Loops:** only gain-normalised, never trimmed or faded, and shipped as WAV so the seam stays clean (mp3 padding would click). The wind was resampled to 22,050 Hz with an FFT resample, which treats the clip as periodic.
+- Sounds that repeat a lot get ±5% pitch variation and pick from two takes. Some are rate-limited (`minGapMs`).
+
+| Event | File(s) | Mirelo prompt (shortened) | Take |
+|---|---|---|---|
+| Cannon fires | `fire_0/1.mp3` | Single tank cannon shot outdoors: heavy boom, metallic breech clank | both of 2 |
+| Shell hits ground/rock | `impact_0/1.mp3` | Small shell striking rock and dirt: crack and gravel spray | both of 2 |
+| Shell hits a drone | `hit_0/1.mp3` | Projectile hitting a hovering metal drone: metallic ping and clang | both of 2 |
+| Drone destroyed | `explode_0/1.mp3` | Small drone exploding mid-air: electric crackle, punchy explosion, debris | both of 2 |
+| Burrower killed | `burrowerDie.mp3` | Alien insect killed by an explosion: wet squelch, chitin crack, dying screech | 1 |
+| Tank takes damage | `hurt_0/1.mp3` | Armored hull struck: dull thud, armor clang, interior rattle | both of 2 |
+| Burrower rumbling below | `rumble.mp3` | Low underground rumble of something huge digging beneath sand | 1 |
+| Burrower bursts out | `burst.mp3` | Worm bursting out of sandy ground: sand eruption with a shrieking hiss | 1 |
+| Drone spots you (new) | `alert.mp3` | Robot alarm chirp: two quick rising electronic beeps (2nd try) | #2 of 2 |
+| Scrap / crystal / circuit picked up (new: one per kind) | `pickupScrap.mp3`, `pickupCrystal.mp3`, `pickupCircuit.mp3` | Clanky metal into a bin / glassy chime with a sparkle / plastic clack and a digital blip | 1 each |
+| Fuel seep siphoned (new) | `siphon.mp3` | Pumping fuel from a bubbling alien pool: suction gurgle, glugging | 1 |
+| Ship's cargo door | `door.mp3` | Heavy cargo bay door: hydraulic hiss, grinding metal, clunk | 1 |
+| Workshop opens | `open.mp3` | Console switching on: soft rising electronic chime (2nd try) | #2 of 2 |
+| Refuel (new) | `refuel.mp3` | Liquid fuel glugging into a metal tank, nozzle clunk (2nd try) | #2 of 2 |
+| Repair (new) | `repair.mp3` | Impact wrench burst and hammer clanks on armor (2nd try) | #1 of 2 |
+| Upgrade built | `craft.mp3` | Machinery assembling an upgrade, parts locking in, confirmation chime | 1 |
+| Can't afford / not allowed | `deny.mp3` | UI error buzzer: short low double buzz | 1 |
+| Confirm | `ok.mp3` | UI confirm: clean two-tone blip | 1 |
+| Menu move, pause (new) | `click.mp3` | Tiny soft UI click | 1 |
+| Solar panels out / away | `solar.mp3` | Servo whirring as panels unfold, latch click (2nd try) | #1 of 2 |
+| Low fuel | `lowFuel.mp3` | Cockpit low-fuel warning: urgent electronic beeps | 1 |
+| Rescued to the ship | `rescue.mp3` | Emergency teleport recall: rising energy whoosh, shimmer, soft thump | 1 |
+| New biome found (new) | `discoverBiome.mp3` | Ethereal shimmering swell of airy tones, rising and fading | 1 |
+| Landmark found (new) | `discoverLandmark.mp3` | Deep resonant ominous drone swell with metallic reverberation | 1 |
+| Map open/close (new) | `map.mp3` | Holographic map opening: quick electronic whoosh, digital flicker | 1 |
+| Title: start / continue (new) | `start.mp3` | Electric motor spin-up whine with heavy mechanical clunks | 1 |
+| Scraping a cliff, rock or prop at speed (new) | `bump.mp3` | Tank scraping a rock cliff: short grinding metal on stone | 1 |
+| **Loop:** tank motor (new) | `engine.wav` | Small electric tank driving: humming motor whine, rattling treads on gravel (loop) | #2 of 2 |
+| **Loop:** wind (new) | `wind.wav` | Desolate alien desert wind: soft gusts over dunes, distant hollow howl (20 s loop) | 1 |
+
+- **The motor** hums quietly at rest and rises in volume and pitch with speed. It's silent with a flat battery, in the ship and in the workshop.
+- **The wind** starts on the title screen and drops inside the ship.
+- Both loops go quiet while the game is paused, the map is open, or the page is hidden.
+- The first takes of the alert, workshop open, refuel, repair and solar sounds were mostly silence or flat noise when measured, so those five were generated again.
+- **Not yet checked by ear:** levels and choices were made from measurements (length, onset, peak, RMS, spectrogram), so expect to rebalance after a listen.
+- **Credits:** the Mirelo account had 5,000; this used 807 (4,193 left).
+
+Generations used so far: 237 of 2000 this cycle.

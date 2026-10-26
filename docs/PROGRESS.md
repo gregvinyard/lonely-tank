@@ -175,9 +175,17 @@ Developer feedback: good; rocks needed size variety and jiggled while moving (fi
 
 **Verified:** typecheck ✅, 155 unit tests ✅ (adds the save summary line), 63 browser tests ✅ (adds: title first, New game without a save, Continue resumes, New game asks and Cancel keeps the save).
 
+## Sound effects
+
+- 29 sound events, all Mirelo samples (`public/assets/sfx/`, listed event by event in `ART_REQUESTS.md`). They replace the synth blips, which remain as stand-ins until the files load.
+- New sounds for events that were silent: a drone spotting you, scraping cliffs and rocks, siphoning, refuel vs repair, a pickup sound per resource, biome and landmark discoveries, map, menu clicks, and the title start.
+- Loops: the tank's motor (follows speed) and the wind. They go quiet on pause, map, workshop and hidden page.
+
+**Verified:** typecheck ✅, 156 unit tests ✅ (adds: every sound file exists), 64 browser tests ✅ (adds: every sound file loads and decodes with no 404s). Loop levels checked in a browser across title, idle, driving and pause. Not yet listened to.
+
 ## Next
 
-- Developer playtest of v0.6 and the title screen.
+- Developer playtest of v0.6, the title screen and the sounds.
 
 ## Known issues
 

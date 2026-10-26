@@ -57,7 +57,9 @@ window.addEventListener('resize', () => {
 });
 
 // Browsers only allow audio after a user gesture.
+sfx.load();
 for (const type of ['pointerdown', 'keydown'] as const) window.addEventListener(type, () => sfx.unlock(), { passive: true });
 
 // Exposed for automated browser smoke tests and debugging.
 (window as unknown as { __LT_GAME__: Phaser.Game }).__LT_GAME__ = game;
+(window as unknown as { __LT_SFX__: typeof sfx }).__LT_SFX__ = sfx;

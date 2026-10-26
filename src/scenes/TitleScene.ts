@@ -51,6 +51,9 @@ export class TitleScene extends Phaser.Scene {
     kb.on('keydown-ESC', keyOnce(() => this.closeConfirm()));
     kb.on('keydown-M', keyOnce(() => sfx.toggleMute()));
 
+    // The wind starts here (once the first key or click lets audio play) and carries on into the game.
+    sfx.holdLoops(false);
+    sfx.setLoop('wind', 0.8);
     this.cameras.main.fadeIn(400, 0, 0, 0);
   }
 
@@ -65,7 +68,7 @@ export class TitleScene extends Phaser.Scene {
   private start(fresh: boolean) {
     if (this.leaving) return;
     this.leaving = true;
-    sfx.play('ok');
+    sfx.play('start');
     if (fresh) {
       const storage = browserStorage();
       if (storage) clearSave(storage, SAVE.key);
@@ -181,6 +184,7 @@ export class TitleScene extends Phaser.Scene {
     this.confirm.destroy();
     this.confirm = undefined;
     this.confirmButtons = [];
+    sfx.play('click');
     this.refreshFocus();
   }
 
@@ -188,6 +192,7 @@ export class TitleScene extends Phaser.Scene {
     if (this.leaving) return;
     if (this.confirm) this.confirmFocus = (this.confirmFocus + d + 2) % 2;
     else this.focus = (this.focus + d + this.buttons.length) % this.buttons.length;
+    sfx.play('click');
     this.refreshFocus();
   }
 

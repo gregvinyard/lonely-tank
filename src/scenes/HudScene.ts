@@ -254,7 +254,8 @@ export class HudScene extends Phaser.Scene {
       this.game_.input.keyboard?.resetKeys();
     }
     this.map.setVisible(this.mapOpen);
-    sfx.play('ok');
+    sfx.holdLoops(this.mapOpen);
+    sfx.play('map');
   }
 
   private onDiscovery({ type, title, subtitle, first }: DiscoveryPayload) {
@@ -280,6 +281,8 @@ ${subtitle}`, type === 'landmark' || first ? COLOR.accent : COLOR.text);
       this.game_.input.keyboard?.resetKeys();
     }
     this.pauseMenu.setVisible(this.paused);
+    sfx.holdLoops(this.paused);
+    sfx.play('click');
   }
 
   private createPauseMenu() {
