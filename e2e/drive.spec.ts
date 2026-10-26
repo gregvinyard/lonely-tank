@@ -10,7 +10,7 @@ async function tankState(page: Page) {
 }
 
 test.beforeEach(async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?play');
   await page.waitForFunction(() => (window as any).__LT_GAME__?.scene.isActive('Game'));
   await page.locator('canvas').click({ position: { x: 640, y: 360 } });
 });

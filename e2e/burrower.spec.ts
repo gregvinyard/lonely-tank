@@ -8,7 +8,7 @@ const RESPAWN_MS = 5 * 60_000;
 const read = <T>(page: Page, expr: string) => page.evaluate(expr) as Promise<T>;
 
 test.beforeEach(async ({ page }) => {
-  await page.goto('/?newgame');
+  await page.goto('/?play&newgame');
   await page.waitForFunction(`${SCENE}?.scene.isActive() && ${HUD}?.scene.isActive()`);
 });
 

@@ -7,7 +7,7 @@ const HUD = `${GAME}.scene.getScene('Hud')`;
 const read = <T>(page: Page, expr: string) => page.evaluate(expr) as Promise<T>;
 
 test.beforeEach(async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?play');
   await page.waitForFunction(`${SCENE}?.scene.isActive() && ${HUD}?.scene.isActive()`);
   await page.locator('canvas').click({ position: { x: 5, y: 5 } });
 });

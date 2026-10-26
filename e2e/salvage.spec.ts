@@ -17,7 +17,7 @@ async function state(page: Page) {
 }
 
 test.beforeEach(async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?play');
   await page.waitForFunction(`${SCENE}?.scene.isActive()`);
   await page.locator('canvas').click({ position: { x: 640, y: 360 } });
 });

@@ -41,7 +41,9 @@ export class BootScene extends Phaser.Scene {
     this.createTerrain();
     this.createUiKit();
     this.createPixelFont();
-    this.scene.start('Game');
+    // The title screen comes first; ?play (or ?newgame) goes straight into the game.
+    const params = new URLSearchParams(location.search);
+    this.scene.start(params.has('play') || params.has('newgame') ? 'Game' : 'Title');
   }
 
   /** Lays the ground tile out with seeded flips so the repeat doesn't show. */

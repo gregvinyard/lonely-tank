@@ -3,6 +3,7 @@ import { sfx } from './audio/sfx';
 import { BootScene } from './scenes/BootScene';
 import { GameScene } from './scenes/GameScene';
 import { HudScene } from './scenes/HudScene';
+import { TitleScene } from './scenes/TitleScene';
 import { PALETTE, zoomForViewport } from './data/tuning';
 
 // Pixel lock: the whole game renders at a low virtual resolution and the
@@ -46,7 +47,7 @@ const game = new Phaser.Game({
     // stays smooth on high-refresh displays. Movement code is delta-time based.
     arcade: { debug: false, fixedStep: false },
   },
-  scene: [BootScene, GameScene, HudScene],
+  scene: [BootScene, TitleScene, GameScene, HudScene],
 });
 
 window.addEventListener('resize', () => {

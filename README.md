@@ -39,7 +39,7 @@ npm run dev        # dev server at http://localhost:5173
 | Esc / P | Pause (shows all controls); with the workshop open, Esc closes it |
 | M | Sound on/off |
 
-Progress saves to the browser automatically. Add `?newgame` to the URL to wipe the save and start over, or `?debug` to see physics bodies.
+The game opens on a title screen with Continue and New game. Progress saves to the browser automatically. Add `?play` to the URL to skip the title, `?newgame` to wipe the save and start over, or `?debug` to see physics bodies.
 
 ## Project layout
 

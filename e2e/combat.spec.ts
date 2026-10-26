@@ -4,7 +4,7 @@ const GAME = `window.__LT_GAME__`;
 const SCENE = `${GAME}.scene.getScene('Game')`;
 
 test.beforeEach(async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?play');
   await page.waitForFunction(`${SCENE}?.scene.isActive()`);
 });
 

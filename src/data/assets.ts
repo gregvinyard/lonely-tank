@@ -359,4 +359,25 @@ export const ASSETS: AssetDef[] = [
       },
     }),
   ),
+  // Title screen (v0.7).
+  {
+    key: 'title_bg',
+    width: 320,
+    height: 180,
+    file: 'assets/title_bg.png',
+    placeholder: (g, w, h) => {
+      g.fillStyle(0x2a1f3d).fillRect(0, 0, w, h);
+      g.fillStyle(PALETTE.sandDark).fillRect(0, h * 0.65, w, h * 0.35);
+    },
+  },
+  {
+    key: 'title_logo',
+    width: 140,
+    height: 60,
+    file: 'assets/title_logo.png',
+    placeholder: (g, w, h) => {
+      g.fillStyle(PALETTE.rust).fillRect(4, 4, w - 8, h / 2 - 6);
+      g.fillStyle(PALETTE.teal).fillRect(24, h / 2 + 2, w - 48, h / 2 - 6);
+    },
+  },
 ];

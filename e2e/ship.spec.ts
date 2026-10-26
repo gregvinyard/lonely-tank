@@ -7,7 +7,7 @@ const HUD = `${GAME}.scene.getScene('Hud')`;
 const read = <T>(page: Page, expr: string) => page.evaluate(expr) as Promise<T>;
 
 test.beforeEach(async ({ page }) => {
-  await page.goto('/?newgame');
+  await page.goto('/?play&newgame');
   await page.waitForFunction(`${SCENE}?.scene.isActive() && ${HUD}?.scene.isActive()`);
   await page.locator('canvas').click({ position: { x: 5, y: 5 } });
 });
@@ -116,7 +116,7 @@ test('an old save with the tank parked where the ship now is loads it outside', 
       }),
     );
   });
-  await page.goto('/');
+  await page.goto('/?play');
   await page.waitForFunction(`${SCENE}?.scene.isActive()`);
   const r = await read<{ x: number; y: number; spawn: { x: number; y: number }; hull: number }>(
     page,

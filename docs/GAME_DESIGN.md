@@ -130,7 +130,8 @@ Numbers live in `FUEL`, `WORKSHOP` and `SAVE` in `src/data/tuning.ts`.
 ## Debug
 
 - Add `?debug` to the URL to draw physics bodies.
-- Add `?newgame` to the URL to delete the save and start over (the flag is removed from the address so a reload resumes).
+- The game opens on a title screen: the PixelLab logo over a backdrop, **Continue** (with a line about the save: play time, distance from the ship, biome) and **New game**, which asks before wiping an existing save (Cancel is the default). Keys W/S or arrows, Enter; or the mouse.
+- `?play` skips the title. Add `?newgame` to the URL to delete the save and start over without asking (the flag is removed from the address so a reload resumes).
 
 ## Burrowers (v0.3)
 

@@ -6,7 +6,7 @@ const HUD = `${GAME}.scene.getScene('Hud')`;
 
 const read = <T>(page: Page, expr: string) => page.evaluate(expr) as Promise<T>;
 
-async function start(page: Page, url = '/') {
+async function start(page: Page, url = '/?play') {
   await page.goto(url);
   await page.waitForFunction(`${SCENE}?.scene.isActive() && ${HUD}?.scene.isActive()`);
   await page.locator('canvas').click({ position: { x: 5, y: 5 } });
@@ -147,7 +147,7 @@ test('a corrupted save is ignored and a fresh game starts', async ({ page }) => 
 test('?newgame wipes the save', async ({ page }) => {
   await start(page);
   await page.evaluate(`(() => { const s = ${SCENE}; s.inventory = { scrap: 8, crystal: 2, circuit: 0 }; s.buildUpgrade('plating'); })()`);
-  await start(page, '/?newgame');
+  await start(page, '/?play&newgame');
   expect(await read<number>(page, `${SCENE}.levels.plating`)).toBe(0);
-  expect(new URL(page.url()).search).toBe('');
+  expect(new URL(page.url()).searchParams.has('newgame')).toBe(false);
 });

@@ -4,7 +4,7 @@ const GAME = `window.__LT_GAME__`;
 const SCENE = `${GAME}.scene.getScene('Game')`;
 const HUD = `${GAME}.scene.getScene('Hud')`;
 
-async function start(page: Page, url = '/') {
+async function start(page: Page, url = '/?play') {
   await page.goto(url);
   await page.waitForFunction(`${SCENE}?.scene.isActive() && ${HUD}?.scene.isActive()`);
   // Focus the canvas so it gets key presses.

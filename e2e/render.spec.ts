@@ -36,7 +36,7 @@ const POSES: { mouse: [number, number]; keys: string[] }[] = [
 ];
 
 test('turret renders completely over the hull while driving', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?play');
   await page.waitForFunction(`${game}?.scene.isActive('Game')`);
 
   for (const pose of POSES) {

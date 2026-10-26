@@ -170,6 +170,11 @@ Everything below came from PixelLab; the choice of candidates and the packing ar
   - the half-buried saucer (seed 618, #1)
 - **`seep.png`** (4 frames, 32×32): `create_image_pro`, seed 616, picked from 64 candidates.
 
+### Title screen
+
+- **`title_bg.png`** (320×180, opaque): `create_image_pro` (1 candidate, 10 generations): "Title screen backdrop, side view landscape at dusk on a lonely alien desert planet: rust-orange dunes and distant flat-topped mesas, a huge ringed gas giant and two small moons in a deep violet-teal sky with stars, a small battered tank silhouetted on a dune ridge in the lower right third, crashed spaceship wreck far on the horizon." Drawn at a whole-number scale that covers the screen, anchored to the bottom.
+- **`title_logo.png`** (140×60): `create_image_pro` at 160×80 (4 candidates, 10 generations): "Video game title logo reading "LONELY TANK" in big chunky bold blocky pixel letters, two lines… riveted rusty orange metal letters with dark brown outline and teal highlight". Candidate #2 (italic, teal tops over rust), cropped to its bounds plus 2 px.
+
 ## UI kit (code-drawn)
 
 Frames (`ui_panel`, `ui_plate`, `ui_button*`, `ui_bar`) and 9×9 HUD icons (`icon_hull`, `icon_fuel`, `icon_circuit`, `icon_warn`, `icon_up`) are pixel maps in `src/data/uiKit.ts`, drawn at boot. PixelLab's UI panel tool makes 192–688 px panels, far bigger than this game's ~400 px-tall view, so small frames are hand-drawn to stay on the pixel grid. PixelLab will be used for the larger upgrade icons (M7).

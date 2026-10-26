@@ -9,7 +9,7 @@ const DRONE_MS = 5 * 60_000;
 const read = <T>(page: Page, expr: string) => page.evaluate(expr) as Promise<T>;
 
 test.beforeEach(async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?play');
   await page.waitForFunction(`${SCENE}?.scene.isActive() && ${HUD}?.scene.isActive()`);
 });
 

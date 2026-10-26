@@ -167,9 +167,17 @@ Developer feedback: good; rocks needed size variety and jiggled while moving (fi
 
 **Verified:** typecheck ✅, 152 unit tests ✅ (adds biomes, home-square guarantees, features in their cells, the 26,000 px reachability flood fill, push-out, chunk determinism and ids, saves with explored data and negative positions), 61 browser tests ✅ (adds: mesas, lakes and canyons stop the tank, streaming three laps without piling up objects, a far save at negative coordinates, discovery and the map, the map fitting a squarish window, siphoning a seep).
 
+## Title screen
+
+- A title screen is the first thing on load or refresh: a PixelLab "Lonely Tank" logo over a PixelLab dusk backdrop (ringed planet, wreck, a tank on the dunes).
+- **Continue** shows play time, distance from the ship and biome; **New game** asks before wiping a save. Keyboard or mouse.
+- `?play` (or `?newgame`) goes straight into the game; the browser tests use it.
+
+**Verified:** typecheck ✅, 155 unit tests ✅ (adds the save summary line), 63 browser tests ✅ (adds: title first, New game without a save, Continue resumes, New game asks and Cancel keeps the save).
+
 ## Next
 
-- Developer playtest of v0.6.
+- Developer playtest of v0.6 and the title screen.
 
 ## Known issues
 
