@@ -36,6 +36,9 @@ export interface SaveData {
   destroyed: SavedEvent[];
   drops: SavedDrop[];
   upgrades: UpgradeLevels;
+  /** v0.6: chunks shown on the map ("cx,cy"), and biomes and landmarks found. Older saves have none. */
+  explored?: string[];
+  discovered?: string[];
 }
 
 type Storage = Pick<globalThis.Storage, 'getItem' | 'setItem' | 'removeItem'>;
@@ -98,7 +101,7 @@ export function parseSave(raw: string): SaveData | undefined {
   if (d.version === 1) d = migrateV1(d);
   if (!isObj(d) || d.version !== SAVE_VERSION) return undefined;
 
-  const { seed, playTimeMs, tank, inventory, collected, destroyed, drops, upgrades } = d;
+  const { seed, playTimeMs, tank, inventory, collected, destroyed, drops, upgrades, explored, discovered } = d;
   if (!Number.isInteger(seed) || !isNum(playTimeMs) || playTimeMs < 0) return undefined;
   if (!isObj(tank) || ![tank.x, tank.y, tank.hull, tank.fuel].every(isNum)) return undefined;
   if (tank.battery !== undefined && !isNum(tank.battery)) return undefined;
@@ -106,6 +109,8 @@ export function parseSave(raw: string): SaveData | undefined {
   if (!isEvents(collected) || !isEvents(destroyed)) return undefined;
   if (!Array.isArray(drops) || !drops.every(isDrop)) return undefined;
   if (!isObj(upgrades)) return undefined;
+  const strings = (v: unknown) => v === undefined || (Array.isArray(v) && v.every((s) => typeof s === 'string'));
+  if (!strings(explored) || !strings(discovered)) return undefined;
 
   const levels = noUpgrades();
   for (const u of UPGRADES) {
@@ -131,6 +136,8 @@ export function parseSave(raw: string): SaveData | undefined {
     destroyed: destroyed.map(({ id, at }) => ({ id, at })),
     drops: drops.map(({ id, kind, amount, x, y }) => ({ id, kind, amount, x, y })),
     upgrades: levels,
+    ...(explored === undefined ? {} : { explored: [...(explored as string[])] }),
+    ...(discovered === undefined ? {} : { discovered: [...(discovered as string[])] }),
   };
 }
 
@@ -192,14 +199,14 @@ export function clampTank(
   t: SaveData['tank'],
   maxHull: number,
   maxFuel: number,
-  worldSize: number,
+  bounds: { min: number; max: number },
   margin: number,
   maxBattery: number,
 ): Required<SaveData['tank']> {
   const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
   return {
-    x: clamp(t.x, margin, worldSize - margin),
-    y: clamp(t.y, margin, worldSize - margin),
+    x: clamp(t.x, bounds.min + margin, bounds.max - margin),
+    y: clamp(t.y, bounds.min + margin, bounds.max - margin),
     hull: clamp(Math.round(t.hull), 1, maxHull),
     fuel: clamp(t.fuel, 0, maxFuel),
     battery: clamp(t.battery ?? maxBattery, 0, maxBattery),

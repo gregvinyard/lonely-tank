@@ -218,3 +218,29 @@ export const SAVE = {
   key: 'lonely-tank.save',
   autosaveMs: 15000,
 } as const;
+
+// v0.6: the planet. The original 2048 px map is the "home square" at
+// 0..WORLD_SIZE; the rest of the world spreads out around it in every
+// direction (negative coordinates included), built in chunks near the tank.
+export const PLANET = {
+  bounds: { min: -30720, max: 32768 }, // ~63k px across: whole feature cells
+  chunkSize: 512, // px; ground, props and hostiles stream in and out by chunk
+  loadRadius: 2, // chunks around the tank's chunk kept built (5x5)
+  unloadRadius: 3, // and torn down past this
+  // Biomes: the nearest of a jittered grid of sites (after warping the point) decides.
+  biomeCell: 4200,
+  biomeWarp: 1100, // px the borders wander
+  biomeWarpScale: 2600,
+  biomeBlend: 36, // px of dithered mixing at a border
+  homeFlats: 5000, // sites this close to the ship are always dust flats
+  // Cliffs, canyons and lakes: at most one feature group per cell, kept inside
+  // it with a gap, so they never join up and wall anything in.
+  featureCell: 2048,
+  featureInset: 140, // px between a feature and its cell's edge
+  homeKeepOut: 700, // features stay this far outside the home square
+  mesaHeight: 34, // px of cliff face below a mesa top
+  canyonWall: 14, // px of rock face on a canyon's north wall
+  terrainMargin: 6, // px props and homes keep from impassable ground
+  // Landmarks and discoveries.
+  discoverRadius: 260,
+} as const;

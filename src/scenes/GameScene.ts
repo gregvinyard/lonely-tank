@@ -8,6 +8,7 @@ import {
   FUEL,
   HULL,
   OBSTACLES,
+  PLANET,
   RESCUE,
   RESOURCES,
   RESPAWN,
@@ -38,6 +39,11 @@ import { dueForRespawn } from '../systems/respawn';
 import { atDoorway, doorMouth, doorTarget, entryPath, hullAt, inFrontOfDoor, overHull, sheltered, stepDoor, type ShipState } from '../systems/ship';
 import type { Circle } from '../systems/steer';
 import { generateWorld, type World } from '../systems/worldgen';
+import { BIOMES, type BiomeId } from '../data/biomes';
+import { biomeAt } from '../systems/biome';
+import { chunkContent, chunkKey, chunkOf, chunkOfId, type ChunkContent, type FuelSeep, type Landmark } from '../systems/chunks';
+import { pushOut } from '../systems/terrain';
+import { Planet } from '../world/Planet';
 
 type Keys = Record<'up' | 'down' | 'left' | 'right' | 'interact' | 'one' | 'two' | 'solar', Phaser.Input.Keyboard.Key>;
 
@@ -54,6 +60,19 @@ export interface CollectedPayload {
   amount: number;
   inventory: Inventory;
 }
+
+/** Emitted on game.events when the tank crosses into a biome, or comes across a landmark. */
+export const DISCOVERY_EVENT = 'planet-discovery';
+export interface DiscoveryPayload {
+  /** 'biome': crossed into a biome (first: never been there before). 'landmark': found one. */
+  type: 'biome' | 'landmark';
+  title: string;
+  subtitle: string;
+  first: boolean;
+}
+
+/** Emitted on game.events when the tank siphons a fuel seep. */
+export const SIPHON_EVENT = 'fuel-siphoned';
 
 /** Emitted on game.events when the tank is returned to the ship. */
 export const RESCUED_EVENT = 'tank-rescued';
@@ -102,6 +121,17 @@ export class GameScene extends Phaser.Scene {
   nearestSalvage: ResourceNode | undefined;
   /** The node the tank is close enough to salvage, if any. */
   nearby: ResourceNode | undefined;
+  /** The planet beyond the home square, streamed in around the tank. */
+  planet!: Planet;
+  /** Fuel seeps in the loaded chunks, by id. */
+  readonly seeps = new Map<string, { seep: FuelSeep; sprite: Phaser.GameObjects.Image }>();
+  /** The seep the tank is close enough to siphon, if any. */
+  nearbySeep: FuelSeep | undefined;
+  /** The biome under the tank. */
+  biome: BiomeId = 'flats';
+  /** Chunks the tank has been near (for the map), and biomes and landmarks found. */
+  readonly explored = new Set<string>();
+  readonly discovered = new Set<string>();
   /** Where the tank is relative to the ship: outside, rolling in or out, or parked inside. */
   shipState: ShipState = 'outside';
   readonly shipLayout = SHIP.layout;
@@ -128,10 +158,12 @@ export class GameScene extends Phaser.Scene {
   private rollingOut = false;
   /** The two solar panels, either side of the tank. */
   private panels: Phaser.GameObjects.Image[] = [];
-  /** Rocks and the ship, grown by a drone's radius, for steering. */
-  private droneObstacles: Circle[] = [];
-  /** Rock collision circles, for burrowers (which pass under them). */
-  private rockCircles: Circle[] = [];
+  /** The home square's rocks and the ship, grown by a drone's radius, for steering. */
+  private homeDroneObstacles: Circle[] = [];
+  /** The home square's rock collision circles. */
+  private homeRockCircles: Circle[] = [];
+  /** Home and planet obstacles together, rebuilt when the loaded chunks change. */
+  private obstacleCache = { version: -1, rocks: [] as Circle[], drone: [] as Circle[] };
   private dustDistance = 0;
   private lastFired = -Infinity;
   private invulnUntil = 0;
@@ -179,7 +211,12 @@ export class GameScene extends Phaser.Scene {
     this.collected.clear();
     this.destroyed.clear();
     const worldIds = new Set(this.world.resources.map((n) => n.id));
-    for (const e of save?.collected ?? []) if (worldIds.has(e.id)) this.collected.set(e.id, e.at);
+    for (const e of save?.collected ?? []) if (worldIds.has(e.id) || chunkOfId(e.id)) this.collected.set(e.id, e.at);
+    this.seeps.clear();
+    this.explored.clear();
+    this.discovered.clear();
+    for (const k of save?.explored ?? []) this.explored.add(k);
+    for (const k of save?.discovered ?? []) this.discovered.add(k);
     for (const e of save?.destroyed ?? []) this.destroyed.set(e.id, e.at);
     this.lastFired = -Infinity;
     this.invulnUntil = 0;
@@ -192,7 +229,8 @@ export class GameScene extends Phaser.Scene {
     this.smokeMs = 0;
     const { center } = this.world;
 
-    this.physics.world.setBounds(0, 0, WORLD_SIZE, WORLD_SIZE);
+    const B = PLANET.bounds;
+    this.physics.world.setBounds(B.min, B.min, B.max - B.min, B.max - B.min);
     this.add.tileSprite(0, 0, WORLD_SIZE, WORLD_SIZE, 'terrain').setOrigin(0, 0);
 
     const solids = this.physics.add.staticGroup();
@@ -253,7 +291,7 @@ export class GameScene extends Phaser.Scene {
 
     let start = { x: this.world.spawn.x, y: this.world.spawn.y };
     if (save) {
-      const t = clampTank(save.tank, this.maxHull, this.maxFuel, WORLD_SIZE, TANK.bodyRadius, this.maxBattery);
+      const t = clampTank(save.tank, this.maxHull, this.maxFuel, PLANET.bounds, TANK.bodyRadius, this.maxBattery);
       this.battery = t.battery;
       // Older saves often parked the tank where the (now much bigger) ship is.
       const onShip = overHull({ x: t.x - center.x, y: t.y - center.y }, SHIP.layout, TANK.bodyRadius + 2);
@@ -271,10 +309,10 @@ export class GameScene extends Phaser.Scene {
     };
     this.physics.add.collider(this.tank.hull, solids);
 
-    this.rockCircles = this.world.rocks.map((r) => ({ x: r.x, y: r.y, r: OBSTACLES.sizes[r.size].radius }));
+    this.homeRockCircles = this.world.rocks.map((r) => ({ x: r.x, y: r.y, r: OBSTACLES.sizes[r.size].radius }));
     for (const p of this.world.burrowers) if (!this.destroyed.has(p.id)) this.burrowers.set(p.id, new Burrower(this, p, this.dust));
     const grow = DRONES.bodyRadius + DRONES.obstacleMargin;
-    this.droneObstacles = [
+    this.homeDroneObstacles = [
       ...this.world.rocks.map((r) => ({ x: r.x, y: r.y, r: OBSTACLES.sizes[r.size].radius + grow })),
       ...hullAt(center, SHIP.layout, grow),
     ];
@@ -288,8 +326,20 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.collider(this.shells, solids, (s) => this.impact(s as Phaser.Physics.Arcade.Image));
     this.physics.add.overlap(this.shells, droneGroup, (s, d) => this.onShellHit(s as Phaser.Physics.Arcade.Image, droneOf(d)));
 
+    // The rest of the planet streams in round the tank.
+    this.planet = new Planet(this, this.world.seed, solids, {
+      onLoad: (c) => this.onChunkLoad(c),
+      onUnload: (c) => this.onChunkUnload(c),
+    });
+    this.planet.update(start.x, start.y, true);
+    // A tank saved somewhere that is now impassable is moved to open ground.
+    const free = pushOut(this.planet.features, start.x, start.y, TANK.bodyRadius + 2);
+    if (free) this.tank.reset(start.x + free.x, start.y + free.y);
+    this.biome = biomeAt(this.world.seed, start.x, start.y).biome;
+    this.discovered.add(`biome:${this.biome}`);
+
     const cam = this.cameras.main;
-    cam.setBounds(0, 0, WORLD_SIZE, WORLD_SIZE);
+    cam.setBounds(B.min, B.min, B.max - B.min, B.max - B.min);
     cam.centerOn(start.x, start.y);
     cam.startFollow(this.tank.hull, true, CAMERA.lerp, CAMERA.lerp);
 
@@ -355,6 +405,9 @@ export class GameScene extends Phaser.Scene {
     const st = this.stats;
     const outside = this.shipState === 'outside';
     // In the ship, or rolling through its door, the ship drives the tank.
+    // The planet: stream chunks in round the tank, and keep it off cliffs, out of canyons and lakes.
+    this.planet.update(this.tank.x, this.tank.y);
+    if (outside) this.resolveTerrain();
     if (outside) this.tank.update(input, aim, delta, st);
     else this.tank.turret.setRotation(this.tank.hull.rotation);
     if (!pointer.leftButtonDown()) this.holdFire = false;
@@ -389,12 +442,19 @@ export class GameScene extends Phaser.Scene {
 
     this.updateShip(delta);
 
-    for (const d of this.drones.values()) d.update(time, delta, this.tank, this.inShip, this.droneObstacles);
+    const obstacles = this.obstacles().drone;
+    for (const d of this.drones.values()) {
+      // Each drone only steers round what's near it.
+      const near = obstacles.filter((o) => Math.abs(o.x - d.x) < 360 && Math.abs(o.y - d.y) < 360);
+      d.update(time, delta, this.tank, this.inShip, near);
+    }
 
     this.updateBurrowers(delta);
 
     for (const s of this.shells.getChildren() as Phaser.Physics.Arcade.Image[]) {
       if (time - (s.getData('born') as number) > st.shellLifetimeMs) s.destroy();
+      // Shells fly over canyons and lakes but hit a cliff.
+      else if (this.planet.ground(s.x, s.y).kind.startsWith('mesa')) this.impact(s);
     }
 
     // Blink while invulnerable after a hit.
@@ -405,6 +465,139 @@ export class GameScene extends Phaser.Scene {
     const nodes = Array.from(this.resources.values(), (r) => r.node);
     this.nearby = nearestInRange(this.tank, nodes, RESOURCES.interactRange);
     this.nearestSalvage = st.scanner > 0 ? nearestInRange(this.tank, nodes, Infinity) : undefined;
+    this.nearbySeep = this.nearby ? undefined : nearestInRange(this.tank, Array.from(this.seeps.values(), (s) => s.seep), RESOURCES.interactRange);
+    this.explore();
+  }
+
+  /** Pushes the tank back out of impassable ground, and stops it driving further in. */
+  private resolveTerrain() {
+    const body = this.tankBody;
+    const push = pushOut(this.planet.features, body.center.x, body.center.y, TANK.bodyRadius);
+    if (!push || (push.x === 0 && push.y === 0)) return;
+    body.position.x += push.x;
+    body.position.y += push.y;
+    body.updateCenter();
+    const len = Math.hypot(push.x, push.y);
+    const nx = push.x / len;
+    const ny = push.y / len;
+    const into = body.velocity.x * nx + body.velocity.y * ny;
+    if (into < 0) body.velocity.set(body.velocity.x - into * nx, body.velocity.y - into * ny);
+  }
+
+  /** Home and planet obstacles: rocks (for burrowers) and everything solid, grown for drones. */
+  private obstacles() {
+    const c = this.obstacleCache;
+    if (c.version !== this.planet.version) {
+      const grow = DRONES.bodyRadius + DRONES.obstacleMargin;
+      c.version = this.planet.version;
+      c.rocks = [...this.homeRockCircles, ...this.planet.circles];
+      c.drone = [...this.homeDroneObstacles, ...this.planet.circles.map((o) => ({ x: o.x, y: o.y, r: o.r + grow }))];
+    }
+    return c;
+  }
+
+  /** Marks the map, notices biome crossings and landmarks. */
+  private explore() {
+    const t = this.tank;
+    const { cx, cy } = chunkOf(t.x, t.y);
+    const key = chunkKey(cx, cy);
+    if (!this.explored.has(key)) {
+      // The map shows a chunk once the tank has been in or right next to it.
+      for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) this.explored.add(chunkKey(cx + i, cy + j));
+    }
+    const biome = biomeAt(this.world.seed, t.x, t.y).biome;
+    if (biome !== this.biome) {
+      this.biome = biome;
+      const id = `biome:${biome}`;
+      const first = !this.discovered.has(id);
+      this.discovered.add(id);
+      const def = BIOMES[biome];
+      this.game.events.emit(DISCOVERY_EVENT, { type: 'biome', title: def.name, subtitle: def.blurb, first } satisfies DiscoveryPayload);
+    }
+    for (const c of this.planet.contents()) {
+      for (const lm of c.landmarks) {
+        if (this.discovered.has(lm.id) || Math.hypot(t.x - lm.x, t.y - lm.y) > PLANET.discoverRadius) continue;
+        this.discovered.add(lm.id);
+        sfx.play('ok');
+        this.game.events.emit(DISCOVERY_EVENT, { type: 'landmark', title: lm.name, subtitle: 'Landmark found', first: true } satisfies DiscoveryPayload);
+      }
+    }
+  }
+
+  /** Landmarks found so far (for the map), rebuilt from their chunks. */
+  get foundLandmarks(): Landmark[] {
+    const out: Landmark[] = [];
+    for (const id of this.discovered) {
+      const c = chunkOfId(id);
+      if (!id.startsWith('lm@') || !c) continue;
+      const lm = chunkContent(this.world.seed, c.cx, c.cy).landmarks.find((l) => l.id === id);
+      if (lm) out.push(lm);
+    }
+    return out;
+  }
+
+  /** A chunk came into range: put out its salvage, seeps and hostiles. */
+  private onChunkLoad(c: ChunkContent) {
+    for (const node of c.resources) if (!this.collected.has(node.id) && !this.resources.has(node.id)) this.addResourceNode(node);
+    for (const s of c.seeps) if (!this.collected.has(s.id) && !this.seeps.has(s.id)) this.addSeep(s);
+    for (const p of c.drones) if (!this.destroyed.has(p.id) && !this.drones.has(p.id)) this.drones.set(p.id, new Drone(this, p, this.droneGroup));
+    for (const p of c.burrowers) {
+      if (!this.destroyed.has(p.id) && !this.burrowers.has(p.id)) this.burrowers.set(p.id, new Burrower(this, p, this.dust));
+    }
+  }
+
+  /** A chunk went out of range: take its things away (nothing is lost; it all comes back). */
+  private onChunkUnload(c: ChunkContent) {
+    for (const node of c.resources) {
+      const r = this.resources.get(node.id);
+      if (!r) continue;
+      this.removeNodeSprites(r);
+      this.resources.delete(node.id);
+    }
+    for (const s of c.seeps) {
+      this.seeps.get(s.id)?.sprite.destroy();
+      this.seeps.delete(s.id);
+    }
+    for (const p of c.drones) {
+      this.drones.get(p.id)?.destroy();
+      this.drones.delete(p.id);
+    }
+    for (const p of c.burrowers) {
+      this.burrowers.get(p.id)?.destroy();
+      this.burrowers.delete(p.id);
+    }
+  }
+
+  private removeNodeSprites(r: { sprite: Phaser.GameObjects.Image; glow?: Phaser.GameObjects.Image }) {
+    if (r.glow) {
+      this.tweens.killTweensOf(r.glow);
+      r.glow.destroy();
+    }
+    this.tweens.killTweensOf(r.sprite);
+    r.sprite.destroy();
+  }
+
+  private addSeep(seep: FuelSeep, fadeIn = false) {
+    const sprite = this.add.image(seep.x, seep.y, 'seep', seep.frame).setDepth(2.5);
+    this.seeps.set(seep.id, { seep, sprite });
+    if (fadeIn) {
+      sprite.setAlpha(0);
+      this.tweens.add({ targets: sprite, alpha: 1, duration: 800 });
+    }
+  }
+
+  /** Draws fuel from a seep into the tanks; it seeps back in time. */
+  private siphon(seep: FuelSeep) {
+    if (this.fuel >= this.maxFuel - 0.5) return;
+    const entry = this.seeps.get(seep.id)!;
+    this.seeps.delete(seep.id);
+    this.collected.set(seep.id, this.playTimeMs);
+    this.nearbySeep = undefined;
+    const before = this.fuel;
+    this.fuel = Math.min(this.maxFuel, this.fuel + seep.amount);
+    sfx.play('pickup');
+    this.tweens.add({ targets: entry.sprite, alpha: 0, duration: 400, onComplete: () => entry.sprite.destroy() });
+    this.game.events.emit(SIPHON_EVENT, { amount: Math.round(this.fuel - before) });
   }
 
   /** True while the tank is in the ship or rolling through its door: nothing can touch it. */
@@ -593,7 +786,7 @@ export class GameScene extends Phaser.Scene {
       playerSafe: this.inShip,
       keepOut: this.burrowerKeepOut,
       isClear: (p: { x: number; y: number }) => this.openGround(p),
-      underRock: (p: { x: number; y: number }) => this.rockCircles.some((r) => Math.hypot(p.x - r.x, p.y - r.y) < r.r + 2),
+      underRock: (p: { x: number; y: number }) => this.obstacles().rocks.some((r) => Math.hypot(p.x - r.x, p.y - r.y) < r.r + 2),
     };
     const shells = this.shells.getChildren() as Phaser.Physics.Arcade.Image[];
     for (const b of this.burrowers.values()) {
@@ -628,7 +821,9 @@ export class GameScene extends Phaser.Scene {
     const c = this.world.center;
     const m = doorMouth(SHIP.layout);
     if (Math.hypot(p.x - c.x - m.x, p.y - c.y - m.y) < 70) return false;
-    return this.rockCircles.every((o) => Math.hypot(p.x - o.x, p.y - o.y) >= o.r + r + 4);
+    // Nor into a lake, a canyon or a cliff.
+    if (this.planet.ground(p.x, p.y).kind !== 'open') return false;
+    return this.obstacles().rocks.every((o) => Math.hypot(p.x - o.x, p.y - o.y) >= o.r + r + 4);
   }
 
   private onBurrowEvent(b: Burrower, event: BurrowEvent) {
@@ -719,6 +914,8 @@ export class GameScene extends Phaser.Scene {
       destroyed: events(this.destroyed),
       drops,
       upgrades: this.levels,
+      explored: [...this.explored],
+      discovered: [...this.discovered],
     };
     return writeSave(storage, SAVE.key, data);
   }
@@ -744,24 +941,42 @@ export class GameScene extends Phaser.Scene {
   respawn() {
     const t = this.tank;
     for (const id of dueForRespawn(this.collected, this.playTimeMs, RESPAWN.salvageMs)) {
-      const node = this.world.resources.find((n) => n.id === id);
-      if (!node) {
+      const chunk = chunkOfId(id);
+      // Out on the planet, a chunk that isn't loaded just puts it out next time it is.
+      if (chunk && !this.planet.isLoaded(chunk.cx, chunk.cy)) {
         this.collected.delete(id);
         continue;
       }
-      if (Math.hypot(t.x - node.x, t.y - node.y) < RESPAWN.salvageClearance) continue;
+      const content = chunk && chunkContent(this.world.seed, chunk.cx, chunk.cy);
+      const node = content ? content.resources.find((n) => n.id === id) : this.world.resources.find((n) => n.id === id);
+      const seep = content?.seeps.find((s) => s.id === id);
+      const at = node ?? seep;
+      if (!at) {
+        this.collected.delete(id);
+        continue;
+      }
+      if (Math.hypot(t.x - at.x, t.y - at.y) < RESPAWN.salvageClearance) continue;
       this.collected.delete(id);
-      this.addResourceNode(node, true);
+      if (node) this.addResourceNode(node, true);
+      else if (seep) this.addSeep(seep, true);
     }
     for (const id of dueForRespawn(this.destroyed, this.playTimeMs, RESPAWN.droneMs)) {
-      const p = this.world.drones.find((d) => d.id === id) ?? this.world.burrowers.find((b) => b.id === id);
+      const chunk = chunkOfId(id);
+      if (chunk && !this.planet.isLoaded(chunk.cx, chunk.cy)) {
+        this.destroyed.delete(id);
+        continue;
+      }
+      const content = chunk && chunkContent(this.world.seed, chunk.cx, chunk.cy);
+      const drones = content ? content.drones : this.world.drones;
+      const burrowers = content ? content.burrowers : this.world.burrowers;
+      const p = drones.find((d) => d.id === id) ?? burrowers.find((b) => b.id === id);
       if (!p) {
         this.destroyed.delete(id);
         continue;
       }
       if (Math.hypot(t.x - p.x, t.y - p.y) < RESPAWN.droneClearance) continue;
       this.destroyed.delete(id);
-      const burrower = this.world.burrowers.find((b) => b.id === id);
+      const burrower = burrowers.find((b) => b.id === id);
       if (burrower) {
         const b = new Burrower(this, burrower, this.dust);
         this.burrowers.set(id, b);
@@ -769,7 +984,7 @@ export class GameScene extends Phaser.Scene {
         this.tweens.add({ targets: b.mound, alpha: 1, duration: 600 });
         continue;
       }
-      const drone = new Drone(this, this.world.drones.find((d) => d.id === id)!, this.droneGroup);
+      const drone = new Drone(this, drones.find((d) => d.id === id)!, this.droneGroup);
       this.drones.set(id, drone);
       drone.sprite.setAlpha(0);
       this.tweens.add({ targets: drone.sprite, alpha: 1, duration: 600 });
@@ -795,6 +1010,7 @@ export class GameScene extends Phaser.Scene {
     if (this.shipState !== 'outside') return;
     const node = this.nearby;
     if (node) return this.collect(node);
+    if (this.nearbySeep) return this.siphon(this.nearbySeep);
     if (this.nearDoor) this.enterShip();
   }
 

@@ -31,6 +31,13 @@ export class BootScene extends Phaser.Scene {
       g.generateTexture(a.key, a.width, a.height);
       g.destroy();
     }
+    // Sheets: number their frames.
+    for (const a of ASSETS) {
+      if (!a.frameSize) continue;
+      const tex = this.textures.get(a.key);
+      const n = Math.floor(tex.getSourceImage().width / a.frameSize);
+      for (let i = 0; i < n; i++) tex.add(i, 0, i * a.frameSize, 0, a.frameSize, a.frameSize);
+    }
     this.createTerrain();
     this.createUiKit();
     this.createPixelFont();

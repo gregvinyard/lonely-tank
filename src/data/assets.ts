@@ -16,6 +16,8 @@ export interface AssetDef {
   height: number;
   /** Path relative to the site root, e.g. 'assets/tank_hull.png'. */
   file?: string;
+  /** A sheet of square frames this size, numbered left to right. */
+  frameSize?: number;
   placeholder: (g: Phaser.GameObjects.Graphics, w: number, h: number) => void;
 }
 
@@ -314,4 +316,47 @@ export const ASSETS: AssetDef[] = [
       g.fillStyle(0xfaf0e0, 1).fillCircle(5, 5, 3);
     },
   },
+  // v0.6 planet art (PixelLab), packed into sheets by the art pipeline.
+  {
+    // Seamless 32 px ground and material tiles; see MATERIAL_TILES and BIOMES.
+    key: 'ground_tiles',
+    width: 512,
+    height: 32,
+    file: 'assets/ground_tiles.png',
+    placeholder: (g, w, h) => {
+      const colors = [0x9c4a2a, 0x9c4a2a, 0xc9b6e8, 0xc9b6e8, 0x2c6e6a, 0x2c6e6a, 0x5d6b2c, 0x5d6b2c, 0x7a7090, 0x7a7090, 0xc0703a, 0xc0703a, 0x7fe050, 0x60c040, 0x6a4030, 0x6a4030];
+      colors.forEach((c, i) => g.fillStyle(c).fillRect(i * 32, 0, 32, h));
+      void w;
+    },
+  },
+  {
+    // Seamless 128 px biome grounds (badlands, glass, bloom, mire, ruins).
+    key: 'ground_large',
+    width: 640,
+    height: 128,
+    file: 'assets/ground_large.png',
+    placeholder: (g, w, h) => {
+      [0x9c4a2a, 0xc9b6e8, 0x2c6e6a, 0x5d6b2c, 0x7a7090].forEach((c, i) => g.fillStyle(c).fillRect(i * 128, 0, 128, h));
+      void w;
+    },
+  },
+  ...(
+    [
+      ['flora', 33 * 32, 32, 32],
+      ['props', 30 * 64, 64, 64],
+      ['seep', 4 * 32, 32, 32],
+      ['landmarks', 4 * 128, 128, 128],
+    ] as const
+  ).map(
+    ([key, width, height, frameSize]): AssetDef => ({
+      key,
+      width,
+      height,
+      frameSize,
+      file: `assets/${key}.png`,
+      placeholder: (g, w) => {
+        for (let x = 0; x < w; x += frameSize) g.fillStyle(0x3fb8a8).fillCircle(x + frameSize / 2, frameSize / 2, frameSize / 3);
+      },
+    }),
+  ),
 ];

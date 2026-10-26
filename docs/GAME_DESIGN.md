@@ -210,3 +210,91 @@ Numbers in `BATTERY` (`src/data/tuning.ts`). Pure logic in `src/systems/power.ts
 - **Not tuned to today's map:** fuel and battery are sized for a much bigger world later. On today's map one battery reaches the ship from anywhere.
 - **Pressing E by the door while stranded** still takes the tank in: the ship pulls it in.
 
+## The planet (v0.6)
+
+Numbers in `PLANET` (`src/data/tuning.ts`) and `BIOMES` (`src/data/biomes.ts`). Pure logic, all unit tested in `tests/planet.test.ts`:
+
+- `src/systems/noise.ts`: hashing and value noise.
+- `src/systems/biome.ts`: the biome map.
+- `src/systems/terrain.ts`: mesas, canyons, lakes, and collision.
+- `src/systems/chunks.ts`: what sits on each chunk.
+- `src/systems/paintGround.ts`: the ground painter.
+
+The Phaser side is `src/world/Planet.ts` (streaming) with `src/world/groundWorker.ts`.
+
+- **Layout:**
+  - The original map is the home square at 0..2048, untouched; `tests/worldlock.test.ts` still guards it.
+  - The planet runs from −30,720 to 32,768 px on both axes, about 63 km across, or ~200 s of straight driving edge to edge.
+  - A full tank (about 120 s, ~19 km of driving) gets you roughly 9 km out and back.
+- **Streaming:**
+  - 512 px chunks within 2 of the tank's chunk are built (ground image, props with their collision, decor). The scene adds their salvage, seeps, drones and burrowers.
+  - Chunks past 3 away are torn down; nothing is lost, since all of it is regenerated from the seed.
+  - Ground is painted on a web worker (about 10–30 ms a chunk). After a teleport the 3×3 round the tank is painted at once.
+- **Biomes:**
+  - The nearest of a jittered grid of sites, 4.2 km apart, after warping the point by up to 1.1 km of noise.
+  - Sites within 5 km of the ship are dust flats.
+  - Odds and minimum distances:
+
+    | Biome | Odds | Min. distance |
+    |---|---|---|
+    | flats | 3 | — |
+    | badlands | 2.4 | — |
+    | glass | 2 | 6 km |
+    | bloom | 2 | 5 km |
+    | mire | 1.6 | 7 km |
+    | ruins | 0.5 | 9 km |
+
+  - Borders blend over 36 px with a 2 px dither.
+- **Ground:**
+  - Each biome has a seamless 128 px PixelLab tile.
+  - The painter mixes two offset copies of it along wandering noise lines and adds a slow light/dark drift, so neither the repeat nor the tile seams show.
+  - Dust flats use the same flipped sand pattern as the home square, so the border is invisible.
+- **Impassable terrain:**
+  - One feature group per 2048 px cell, chosen by the biome at the cell's centre.
+  - The group is kept 140 px inside the cell and 700 px clear of the home square.
+  - **Mesas:** a blob base outline whose top is drawn 34 px higher. Between them is the cliff face, darkening toward its foot, with a shadow down and to the right. The base and top are both solid, and mesas stop shells.
+  - **Canyons:**
+    - A band 50–100 px wide along a sine-wiggled line up to 1.7 km long.
+    - The north wall shows 14 px of lit rock, then dark depths.
+    - The ends taper.
+  - **Lakes:**
+    - Acid (green) or ichor (violet), as a blob plus up to 4 ponds.
+    - Each has a foam line and bright shallows, then calmer, darker deep water.
+    - The shore is wet.
+  - **Why nothing gets walled in:**
+    - Blobs are star-shaped (the wobble amplitudes add up to under 0.32), so they have no holes or pockets.
+    - Canyon centre lines are graphs over their axis, so they never loop.
+    - Features never touch: each is kept inside its own cell, and ponds and buttes keep a tank-wide gap.
+    - Props in a chunk keep a 50 px gap and stay 25 px inside their chunk.
+    - A 26 km flood-fill test checks every open spot is reachable from the ship.
+  - **Collision:**
+    - The tank is pushed out of any impassable ground along the blocked side of its rim, and loses the speed it had into it, so it slides along shores and walls.
+    - Drones fly over all of it. Burrowers won't tunnel into it. Shells fly over canyons and lakes.
+- **Per chunk (512 px), the expected counts:**
+
+  | Biome | Rocks | Props | Plants | Scrap | Crystal | Circuit | Seeps | Drones | Burrowers |
+  |---|---|---|---|---|---|---|---|---|---|
+  | flats | 2.2 | — | 0.6 | 0.55 | 0.12 | — | — | 0.12 | 0.1 |
+  | badlands | 3 | — | 1.5 | 1.1 | 0.15 | — | — | 0.22 | 0.05 |
+  | glass | 0.6 | 2.6 spires | 1 | 0.15 | 1.1 | — | — | 0.25 | — |
+  | bloom | 0.6 | 3 fungus | 10 | 0.35 | 0.5 | — | — | 0.08 | 0.32 |
+  | mire | 1.2 | 0.4 | 6 | 0.45 | 0.1 | — | 0.45 | 0.08 | 0.2 |
+  | ruins | 0.3 | 5 walls (street grid) | 3 | 0.8 | 0.1 | 0.7 | — | 0.45 | — |
+
+  - Hostile counts are multiplied by 1 + distance / 20 km.
+  - Nothing hostile, and no salvage, within 2.6 km of the ship.
+  - Salvage gets +1 for every 7 km out (max +3).
+  - Seeps hold 35 fuel, +10 per 7 km.
+  - About 1 chunk in 70–100 has a landmark: Leviathan bones (driven over), The Monolith, or the Fallen saucer (solid).
+- **Ids** carry their chunk: `scrap@12,-3#1`, `seep@…`, `drone@…`, `burrower@…`, `lm@…`. Collected and destroyed events work as before. A respawn whose chunk isn't loaded is simply dropped, since the chunk puts it out next time it loads.
+- **Discovery:**
+  - Crossing into a biome shows its name and a line about it ("New biome: …" the first time).
+  - Coming within 260 px of a landmark announces it.
+  - Both are saved in `discovered`.
+- **Map (Tab):**
+  - 400×250 px at 96 world px per pixel, centred on the tank.
+  - Explored chunks (the tank's chunk and its neighbours) are shown in biome colours, with lakes, canyons and mesas. The rest is fog.
+  - Marks the ship, the tank and landmarks found, with a legend of the biomes found.
+  - The game waits while it's open. Esc closes it too.
+- **Saves:** `explored` and `discovered` are optional string lists, so v0.5 saves still load. The tank's position is clamped to the planet's bounds, and a tank saved somewhere impassable is moved to open ground.
+

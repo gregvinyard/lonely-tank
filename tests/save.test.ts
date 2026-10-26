@@ -111,9 +111,20 @@ describe('save', () => {
   });
 
   it('clamps tank values into range', () => {
-    expect(clampTank({ x: -50, y: 5000, hull: 0, fuel: 150, battery: 30 }, 125, 100, 2048, 20, 20)).toEqual({ x: 20, y: 2028, hull: 1, fuel: 100, battery: 20 });
-    expect(clampTank({ x: 500, y: 600, hull: 200, fuel: -3, battery: -1 }, 100, 100, 2048, 20, 20)).toEqual({ x: 500, y: 600, hull: 100, fuel: 0, battery: 0 });
+    expect(clampTank({ x: -50, y: 5000, hull: 0, fuel: 150, battery: 30 }, 125, 100, { min: 0, max: 2048 }, 20, 20)).toEqual({ x: 20, y: 2028, hull: 1, fuel: 100, battery: 20 });
+    expect(clampTank({ x: 500, y: 600, hull: 200, fuel: -3, battery: -1 }, 100, 100, { min: 0, max: 2048 }, 20, 20)).toEqual({ x: 500, y: 600, hull: 100, fuel: 0, battery: 0 });
     // Saved before the hybrid drive: the battery starts full.
-    expect(clampTank({ x: 500, y: 600, hull: 50, fuel: 10 }, 100, 100, 2048, 20, 20).battery).toBe(20);
+    expect(clampTank({ x: 500, y: 600, hull: 50, fuel: 10 }, 100, 100, { min: 0, max: 2048 }, 20, 20).battery).toBe(20);
+    // Out on the planet, coordinates can be negative.
+    const far = clampTank({ x: -9000, y: -40000, hull: 50, fuel: 10 }, 100, 100, { min: -30720, max: 32768 }, 20, 20);
+    expect([far.x, far.y]).toEqual([-9000, -30700]);
+  });
+
+  it('keeps the explored map and discoveries, and loads saves without them', () => {
+    const base = JSON.parse(JSON.stringify(good));
+    expect(parseSave(JSON.stringify(base))?.explored).toBeUndefined();
+    const withMap = { ...base, explored: ['4,-2', '5,-2'], discovered: ['biome:glass', 'lm@9,3'] };
+    expect(parseSave(JSON.stringify(withMap))).toMatchObject({ explored: ['4,-2', '5,-2'], discovered: ['biome:glass', 'lm@9,3'] });
+    expect(parseSave(JSON.stringify({ ...base, explored: [3] }))).toBeUndefined();
   });
 });

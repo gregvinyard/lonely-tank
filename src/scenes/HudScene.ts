@@ -9,12 +9,16 @@ import type { ResourceKind } from '../systems/resources';
 import { RESOURCE_KINDS } from '../systems/resources';
 import { goalText } from '../systems/workshop';
 import { RESOURCE_ICON, WorkshopPanel } from '../ui/WorkshopPanel';
+import { MapPanel } from '../ui/MapPanel';
 import { Bar, Plate, UI_TEXT, centerOn, frame, label } from '../ui/widgets';
 import {
   COLLECTED_EVENT,
+  DISCOVERY_EVENT,
   RESCUED_EVENT,
+  SIPHON_EVENT,
   WORKSHOP_EVENT,
   type CollectedPayload,
+  type DiscoveryPayload,
   type GameScene,
   type RescuedPayload,
   type WorkshopPayload,
@@ -31,11 +35,12 @@ const CONTROLS: [string, string][] = [
   ['WASD', 'Drive'],
   ['Mouse', 'Aim turret'],
   ['Left click', 'Fire (hold)'],
-  ['E', 'Salvage / enter ship'],
+  ['E', 'Salvage / siphon / enter'],
   ['E / Esc', 'Leave ship'],
   ['F', 'Solar panels (stopped)'],
   ['1 / 2', 'Refuel / repair'],
   ['Space', 'Build upgrade'],
+  ['Tab', 'Planet map'],
   ['M', 'Sound on/off'],
   ['Esc / P', 'Pause'],
 ];
@@ -73,6 +78,10 @@ export class HudScene extends Phaser.Scene {
   private toastTimer?: Phaser.Time.TimerEvent;
   /** Tracked here because scene.pause() only takes effect on the next step. */
   paused = false;
+  map!: MapPanel;
+  mapOpen = false;
+  discovery!: Plate;
+  private discoveryTimer?: Phaser.Time.TimerEvent;
 
   constructor() {
     super('Hud');
@@ -83,6 +92,7 @@ export class HudScene extends Phaser.Scene {
     this.shownHull = -1;
     this.shownGoal = '';
     this.paused = false;
+    this.mapOpen = false;
 
     this.createStatsPanel();
     this.goal = new Plate(this, '', { tint: COLOR.dim });
@@ -103,11 +113,16 @@ export class HudScene extends Phaser.Scene {
     this.banner = new Plate(this, '', { frameKey: 'ui_panel', padX: 9, padY: 9, tint: COLOR.danger }).setVisible(false).setDepth(5);
     this.bannerText = this.banner.text;
     this.createPauseMenu();
+    this.discovery = new Plate(this, '', { frameKey: 'ui_panel', padX: 9, padY: 7, tint: COLOR.accent }).setVisible(false).setDepth(4);
+    this.discovery.text.setCenterAlign();
+    this.map = new MapPanel(this, this.game_).setVisible(false).setDepth(9);
 
     const kb = this.input.keyboard!;
     kb.on('keydown-ESC', keyOnce(() => (this.game_.workshopOpen ? this.game_.closeWorkshop() : this.togglePause())));
     kb.on('keydown-P', keyOnce(() => !this.game_.workshopOpen && this.togglePause()));
     kb.on('keydown-M', keyOnce(() => this.showToast(sfx.toggleMute() ? 'Sound off' : 'Sound on')));
+    kb.addCapture('TAB');
+    kb.on('keydown-TAB', keyOnce(() => this.toggleMap()));
     // Workshop navigation (the tank holds still while it's open, so WASD is free).
     const nav = (key: string, fn: () => void) => kb.on(`keydown-${key}`, keyOnce(() => this.game_.workshopOpen && !this.paused && fn()));
     for (const [keys, dx, dy] of [
@@ -124,6 +139,10 @@ export class HudScene extends Phaser.Scene {
     const onCollected = (p: CollectedPayload) => this.onCollected(p);
     const onRescued = (p: RescuedPayload) => this.onRescued(p);
     const onWorkshop = (p: WorkshopPayload) => this.onWorkshop(p);
+    const onDiscovery = (p: DiscoveryPayload) => this.onDiscovery(p);
+    const onSiphon = (p: { amount: number }) => this.showToast(`+${p.amount} fuel siphoned`, 'icon_fuel', 2000);
+    this.game.events.on(DISCOVERY_EVENT, onDiscovery);
+    this.game.events.on(SIPHON_EVENT, onSiphon);
     this.game.events.on(COLLECTED_EVENT, onCollected);
     this.game.events.on(RESCUED_EVENT, onRescued);
     this.game.events.on(WORKSHOP_EVENT, onWorkshop);
@@ -131,6 +150,8 @@ export class HudScene extends Phaser.Scene {
       this.game.events.off(COLLECTED_EVENT, onCollected);
       this.game.events.off(RESCUED_EVENT, onRescued);
       this.game.events.off(WORKSHOP_EVENT, onWorkshop);
+      this.game.events.off(DISCOVERY_EVENT, onDiscovery);
+      this.game.events.off(SIPHON_EVENT, onSiphon);
     });
   }
 
@@ -139,9 +160,14 @@ export class HudScene extends Phaser.Scene {
     const { width, height } = this.scale;
 
     const node = g.nearby;
+    const seep = g.nearbySeep;
     const prompt = node
       ? `[E] Salvage ${LABELS[node.kind]} ×${node.amount}`
-      : g.nearDoor
+      : seep
+        ? g.fuel >= g.maxFuel - 0.5
+          ? 'Fuel seep · tanks full'
+          : `[E] Siphon fuel +${Math.round(Math.min(seep.amount, g.maxFuel - g.fuel))}`
+        : g.nearDoor
         ? '[E] Enter ship · or drive in'
         : '';
     this.prompt.setVisible(!!prompt);
@@ -158,6 +184,8 @@ export class HudScene extends Phaser.Scene {
     const bannerTop = g.workshopOpen ? 2 : height / 2 + 28;
     this.banner.setPosition(Math.round((width - this.banner.width) / 2), Math.round(bannerTop));
     this.layoutPause(width, height);
+    centerOn(this.discovery, width / 2, 44);
+    if (this.mapOpen) centerOn(this.map, width / 2, height / 2);
     this.updateBars();
     this.updateGoal();
     this.updateWorkshop(width, height);
@@ -214,7 +242,35 @@ export class HudScene extends Phaser.Scene {
     this.goal.setPosition(4, this.panel.y + this.panel.height + 2);
   }
 
+  /** The planet map; the game waits while it's open. */
+  toggleMap() {
+    if (this.paused || this.game_.workshopOpen) return;
+    this.mapOpen = !this.mapOpen;
+    if (this.mapOpen) {
+      this.map.refresh();
+      this.scene.pause('Game');
+    } else {
+      this.scene.resume('Game');
+      this.game_.input.keyboard?.resetKeys();
+    }
+    this.map.setVisible(this.mapOpen);
+    sfx.play('ok');
+  }
+
+  private onDiscovery({ type, title, subtitle, first }: DiscoveryPayload) {
+    const head = type === 'landmark' ? `Found: ${title}` : first ? `New biome: ${title}` : title;
+    this.discovery.setLabel(`${head}
+${subtitle}`, type === 'landmark' || first ? COLOR.accent : COLOR.text);
+    this.discovery.setVisible(true).setAlpha(1);
+    this.tweens.killTweensOf(this.discovery);
+    this.discoveryTimer?.remove();
+    this.discoveryTimer = this.time.delayedCall(first ? 4000 : 2500, () =>
+      this.tweens.add({ targets: this.discovery, alpha: 0, duration: 600, onComplete: () => this.discovery.setVisible(false) }),
+    );
+  }
+
   togglePause() {
+    if (this.mapOpen) return this.toggleMap();
     this.paused = !this.paused;
     if (this.paused) {
       this.scene.pause('Game');
@@ -228,7 +284,7 @@ export class HudScene extends Phaser.Scene {
 
   private createPauseMenu() {
     const w = 204;
-    const h = 136;
+    const h = 147;
     this.pauseDim = this.add.rectangle(0, 0, 10, 10, 0x000000, 0.55).setOrigin(0, 0);
     const parts: Phaser.GameObjects.GameObject[] = [frame(this, 'ui_panel', 0, 0, w, h)];
     const title = label(this, 0, 9, 'Paused', COLOR.accent);
@@ -238,8 +294,8 @@ export class HudScene extends Phaser.Scene {
       const y = 22 + i * 11;
       parts.push(label(this, 12, y, key, COLOR.text), label(this, 86, y, what, COLOR.dim));
     });
-    const saves = label(this, 0, 104, 'Progress saves automatically', COLOR.dim);
-    const resume = label(this, 0, 117, '[Esc] resume', COLOR.text);
+    const saves = label(this, 0, 115, 'Progress saves automatically', COLOR.dim);
+    const resume = label(this, 0, 128, '[Esc] resume', COLOR.text);
     for (const t of [saves, resume]) t.setX(Math.round((w - t.width) / 2));
     parts.push(saves, resume);
     this.pausePanel = this.add.container(0, 0, parts).setSize(w, h);
