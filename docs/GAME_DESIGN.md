@@ -212,7 +212,7 @@ Numbers in `BATTERY` (`src/data/tuning.ts`). Pure logic in `src/systems/power.ts
 
 ## The planet (v0.6)
 
-Numbers in `PLANET` (`src/data/tuning.ts`) and `BIOMES` (`src/data/biomes.ts`). Pure logic, all unit tested in `tests/planet.test.ts`:
+Numbers in `PLANET` (`src/data/tuning.ts`) and `BIOMES` (`src/data/biomes.ts`). Distances are in world px; the HUD shows px / 10 as metres. Pure logic, all unit tested in `tests/planet.test.ts`:
 
 - `src/systems/noise.ts`: hashing and value noise.
 - `src/systems/biome.ts`: the biome map.
@@ -224,25 +224,25 @@ The Phaser side is `src/world/Planet.ts` (streaming) with `src/world/groundWorke
 
 - **Layout:**
   - The original map is the home square at 0..2048, untouched; `tests/worldlock.test.ts` still guards it.
-  - The planet runs from −30,720 to 32,768 px on both axes, about 63 km across, or ~200 s of straight driving edge to edge.
-  - A full tank (about 120 s, ~19 km of driving) gets you roughly 9 km out and back.
+  - The planet runs from −30,720 to 32,768 px on both axes: 63,500 px (6.3 km on the HUD) across, or ~200 s of straight driving edge to edge.
+  - A full tank (about 120 s, ~19,000 px of driving) gets you roughly 9,000 px out and back.
 - **Streaming:**
   - 512 px chunks within 2 of the tank's chunk are built (ground image, props with their collision, decor). The scene adds their salvage, seeps, drones and burrowers.
   - Chunks past 3 away are torn down; nothing is lost, since all of it is regenerated from the seed.
   - Ground is painted on a web worker (about 10–30 ms a chunk). After a teleport the 3×3 round the tank is painted at once.
 - **Biomes:**
-  - The nearest of a jittered grid of sites, 4.2 km apart, after warping the point by up to 1.1 km of noise.
-  - Sites within 5 km of the ship are dust flats.
+  - The nearest of a jittered grid of sites, 4,200 px apart, after warping the point by up to 1,100 px of noise.
+  - Sites within 5,000 px of the ship are dust flats. The distance limits below are for sites, so a region's edge can come up to a few thousand px closer.
   - Odds and minimum distances:
 
     | Biome | Odds | Min. distance |
     |---|---|---|
     | flats | 3 | — |
     | badlands | 2.4 | — |
-    | glass | 2 | 6 km |
-    | bloom | 2 | 5 km |
-    | mire | 1.6 | 7 km |
-    | ruins | 0.5 | 9 km |
+    | glass | 2 | 6,000 px |
+    | bloom | 2 | 5,000 px |
+    | mire | 1.6 | 7,000 px |
+    | ruins | 0.5 | 9,000 px |
 
   - Borders blend over 36 px with a 2 px dither.
 - **Ground:**
@@ -254,7 +254,7 @@ The Phaser side is `src/world/Planet.ts` (streaming) with `src/world/groundWorke
   - The group is kept 140 px inside the cell and 700 px clear of the home square.
   - **Mesas:** a blob base outline whose top is drawn 34 px higher. Between them is the cliff face, darkening toward its foot, with a shadow down and to the right. The base and top are both solid, and mesas stop shells.
   - **Canyons:**
-    - A band 50–100 px wide along a sine-wiggled line up to 1.7 km long.
+    - A band 50–100 px wide along a sine-wiggled line up to 1,700 px long.
     - The north wall shows 14 px of lit rock, then dark depths.
     - The ends taper.
   - **Lakes:**
@@ -266,7 +266,7 @@ The Phaser side is `src/world/Planet.ts` (streaming) with `src/world/groundWorke
     - Canyon centre lines are graphs over their axis, so they never loop.
     - Features never touch: each is kept inside its own cell, and ponds and buttes keep a tank-wide gap.
     - Props in a chunk keep a 50 px gap and stay 25 px inside their chunk.
-    - A 26 km flood-fill test checks every open spot is reachable from the ship.
+    - A 26,000 px-square flood-fill test checks every open spot is reachable from the ship.
   - **Collision:**
     - The tank is pushed out of any impassable ground along the blocked side of its rim, and loses the speed it had into it, so it slides along shores and walls.
     - Drones fly over all of it. Burrowers won't tunnel into it. Shells fly over canyons and lakes.
@@ -281,10 +281,10 @@ The Phaser side is `src/world/Planet.ts` (streaming) with `src/world/groundWorke
   | mire | 1.2 | 0.4 | 6 | 0.45 | 0.1 | — | 0.45 | 0.08 | 0.2 |
   | ruins | 0.3 | 5 walls (street grid) | 3 | 0.8 | 0.1 | 0.7 | — | 0.45 | — |
 
-  - Hostile counts are multiplied by 1 + distance / 20 km.
-  - Nothing hostile, and no salvage, within 2.6 km of the ship.
-  - Salvage gets +1 for every 7 km out (max +3).
-  - Seeps hold 35 fuel, +10 per 7 km.
+  - Hostile counts are multiplied by 1 + distance / 20,000 px.
+  - Nothing hostile, and no salvage, within 2,600 px of the ship.
+  - Salvage gets +1 for every 7,000 px out (max +3).
+  - Seeps hold 35 fuel, +10 per 7,000 px.
   - About 1 chunk in 70–100 has a landmark: Leviathan bones (driven over), The Monolith, or the Fallen saucer (solid).
 - **Ids** carry their chunk: `scrap@12,-3#1`, `seep@…`, `drone@…`, `burrower@…`, `lm@…`. Collected and destroyed events work as before. A respawn whose chunk isn't loaded is simply dropped, since the chunk puts it out next time it loads.
 - **Discovery:**

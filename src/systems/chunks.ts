@@ -266,6 +266,8 @@ function buildChunk(seed: number, cx: number, cy: number): ChunkContent {
     for (let n = count(rng, def.drone * threat), tries = 0; n > 0 && tries < 10; tries++) {
       const p = spot(64);
       if (solids.some((o) => Math.hypot(o.x - p.x, o.y - p.y) < o.r + DRONES.bodyRadius + 20)) continue;
+      // Not over a mesa, where shells (which hit cliffs) couldn't reach it.
+      if (!circleClear(features, p.x, p.y, DRONES.patrolRadius / 2)) continue;
       const drop = rng() < DRONES.scrapDropChance ? 1 + Math.floor(rng() * 2) : 0;
       out.drones.push({ id: `drone@${cx},${cy}#${out.drones.length}`, x: p.x, y: p.y, drop });
       n--;

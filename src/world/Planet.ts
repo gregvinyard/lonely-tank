@@ -52,6 +52,8 @@ export class Planet {
     try {
       this.worker = new Worker(new URL('./groundWorker.ts', import.meta.url), { type: 'module' });
       this.worker.onmessage = (e: MessageEvent<GroundReply>) => this.onPainted(e.data);
+      // A worker that fails to load reports it later: paint on this thread from then on.
+      this.worker.onerror = () => this.dropWorker();
       this.worker.postMessage({ type: 'materials', materials: this.materials } satisfies GroundRequest);
     } catch {
       this.worker = undefined; // paint on the main thread instead
@@ -124,6 +126,16 @@ export class Planet {
     }
     this.buildProps(l);
     this.hooks.onLoad(content);
+  }
+
+  private dropWorker() {
+    this.worker?.terminate();
+    this.worker = undefined;
+    for (const l of this.loaded.values()) {
+      if (!l.painting) continue;
+      l.painting = false;
+      this.placeGround(l, paintGroundChunk(this.seed, l.content.cx, l.content.cy, this.materials));
+    }
   }
 
   private onPainted(r: GroundReply) {

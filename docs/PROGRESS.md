@@ -158,14 +158,14 @@ Developer feedback: good; rocks needed size variety and jiggled while moving (fi
 
 ## M14 — The planet ✅ (v0.6, `docs/SPEC_v0.6.md`)
 
-- The world grows from a 2 km map to a planet about 63 km across, generated from the seed and streamed in 512 px chunks round the tank (ground painted on a web worker). The original map is untouched in the middle.
+- The world grows from the 2,048 px map to a planet 63,500 px across (6.3 km on the HUD), generated from the seed and streamed in 512 px chunks round the tank (ground painted on a web worker). The original map is untouched in the middle.
 - Six biomes: Dust Flats, Rust Badlands, Glass Fields, Fungal Bloom, Acid Mire and Old City. Each has its own PixelLab ground, plants, props and salvage mix; the rarer ones lie farther out.
 - Impassable mesas (cliff faces, shadows), canyons and acid or ichor lakes, built so they can never wall anything in (flood-fill tested).
 - Alien ruins on a street grid (with circuits), fungus trees, crystal spires, three kinds of landmark, and fuel seeps you can siphon.
 - Biome and landmark discovery banners, and a planet map on Tab (explored ground, ship, tank, landmarks, biome legend).
 - Saves keep the explored map and discoveries; old saves load unchanged.
 
-**Verified:** typecheck ✅, 152 unit tests ✅ (adds biomes, home-square guarantees, features in their cells, the 26 km reachability flood fill, push-out, chunk determinism and ids, saves with explored data and negative positions), 60 browser tests ✅ (adds: mesas, lakes and canyons stop the tank, streaming three laps without piling up objects, a far save at negative coordinates, discovery and the map, siphoning a seep).
+**Verified:** typecheck ✅, 152 unit tests ✅ (adds biomes, home-square guarantees, features in their cells, the 26,000 px reachability flood fill, push-out, chunk determinism and ids, saves with explored data and negative positions), 61 browser tests ✅ (adds: mesas, lakes and canyons stop the tank, streaming three laps without piling up objects, a far save at negative coordinates, discovery and the map, the map fitting a squarish window, siphoning a seep).
 
 ## Next
 

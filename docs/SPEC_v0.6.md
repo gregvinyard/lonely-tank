@@ -1,11 +1,11 @@
 # Lonely Tank — v0.6 Spec: "A Wider World"
 
-v0.6 turns the 2 km wasteland into a planet about 63 km across. Like Minecraft, it is made of biomes: regions with their own ground, plants, terrain, salvage and dangers. The goal is a planet that feels varied and big enough that the player wants to go and look. All earlier rules stay in force.
+v0.6 turns the original wasteland (2,048 px, about 200 m as the HUD counts it: 1 m = 10 px) into a planet about 6.3 km across (63,000 px). Like Minecraft, it is made of biomes: regions with their own ground, plants, terrain, salvage and dangers. The goal is a planet that feels varied and big enough that the player wants to go and look. All earlier rules stay in force.
 
 ## 1. Goals
 
 - A much bigger world, generated from the seed and streamed in around the tank, with no loading screens and no stutter.
-- Biomes, each with its own look, plants and salvage. Not everything is near home: a 2-minute drive (about 19 km) shows a few biomes, and the rarest ones lie farther out.
+- Biomes, each with its own look, plants and salvage. Not everything is near home: a 2-minute drive (about 1.9 km) shows a few biomes, and the rarest ones lie farther out.
 - Impassable terrain: cliffs (mesas), canyons and lakes of alien liquid. It must never wall anything in.
 - Alien ruins, alien plants and landmarks to find.
 - Exploration that pays: richer salvage farther out, fuel seeps for long trips, a map of where you've been.
@@ -27,15 +27,15 @@ v0.6 turns the 2 km wasteland into a planet about 63 km across. Like Minecraft, 
   - Ground is painted on a web worker.
 - **Biomes:**
   - Six biomes: Dust Flats (home), Rust Badlands, Glass Fields, Fungal Bloom, Acid Mire, and Old City (ruins).
-  - They're laid out as warped Voronoi cells about 4 km across.
-  - Everything within about 5 km of the ship is dust flats. Glass, bloom, mire and ruins only appear past 6, 5, 7 and 9 km.
+  - They're laid out as warped Voronoi regions about 420 m across.
+  - Region centres within 500 m of the ship are always dust flats. Glass, bloom, mire and ruins centres sit past 600, 500, 700 and 900 m, though their regions reach a little closer.
   - Borders blend with a dithered edge.
 - **Impassable terrain:**
   - **Mesas:** raised plateaus with a cliff face and a cast shadow. They stop shells.
   - **Canyons:** long chasms with a lit north wall.
   - **Lakes:** acid or violet ichor, with a foam line, shallows and a wet shore.
-  - At most one group per 2 km feature cell, kept inside the cell. Shapes are star-shaped blobs or bands along a wiggly curve, so nothing is ever sealed off; this is unit tested with a flood fill.
-  - The home square plus 700 px around it has none.
+  - At most one group per 205 m (2,048 px) feature cell, kept inside the cell. Shapes are star-shaped blobs or bands along a wiggly curve, so nothing is ever sealed off; this is unit tested with a flood fill.
+  - The home square plus 70 m around it has none.
 - **Things to find:**
   - Biome plants you drive over.
   - Solid props: fungus trees whose caps hang over the tank, crystal spires, and ruin walls and towers on a street grid.
@@ -43,7 +43,7 @@ v0.6 turns the 2 km wasteland into a planet about 63 km across. Like Minecraft, 
   - Landmarks: Leviathan bones, The Monolith, and the Fallen saucer.
 - **Salvage by biome:**
   - Badlands have scrap, glass has crystal, ruins have circuits (the first source besides drones), and the mire has fuel seeps.
-  - Amounts grow by 1 for every 7 km from the ship (up to 3).
+  - Amounts grow by 1 for every 700 m from the ship (up to 3).
   - Siphoning a seep (E) puts fuel in the tank; seeps refill over time like salvage.
 - **Hostiles:** drones and burrowers spawn by biome and grow more common farther out. Ruins are guarded.
 - **Discovery:**

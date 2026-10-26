@@ -129,3 +129,19 @@ test('a fuel seep tops up the tanks', async ({ page }) => {
   await page.waitForFunction(`${SCENE}.fuel > 40`);
   expect(await read<boolean>(page, `[...${SCENE}.collected.keys()].some((k) => k.startsWith('seep@'))`)).toBe(true);
 });
+
+test('the map fits a squarish window', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 1024 });
+  await page.waitForTimeout(300);
+  await page.keyboard.press('Tab');
+  await page.waitForFunction(`${HUD}.mapOpen`);
+  await page.waitForTimeout(100);
+  const r = await read<{ x: number; y: number; w: number; h: number; sw: number; sh: number }>(
+    page,
+    `(() => { const h = ${HUD}; return { x: h.map.x, y: h.map.y, w: h.map.width, h: h.map.height, sw: h.scale.width, sh: h.scale.height }; })()`,
+  );
+  expect(r.x).toBeGreaterThanOrEqual(0);
+  expect(r.y).toBeGreaterThanOrEqual(0);
+  expect(r.x + r.w).toBeLessThanOrEqual(r.sw);
+  expect(r.y + r.h).toBeLessThanOrEqual(r.sh);
+});

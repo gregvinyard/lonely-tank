@@ -11,8 +11,9 @@ import { UI_TEXT, frame, label } from './widgets';
 // The planet map: what the tank has seen, coloured by biome, with lakes,
 // canyons and mesas marked, centred on the tank. Unexplored ground is fogged.
 
-const MAP_W = 400;
-const MAP_H = 250;
+/** Largest map, in game pixels; smaller when the screen is. */
+const MAX_W = 400;
+const MAX_H = 250;
 /** World px per map pixel. */
 const SCALE = 96;
 const PAD = 8;
@@ -23,10 +24,12 @@ const FOG = [0x17, 0x13, 0x18];
 const GROUND_COLOR = { liquid: { acid: 0x56c43c, ichor: 0x8a3cc0 }, canyon: 0x140c10, mesaTop: 0xd88a4a, mesaFace: 0x6a3a22 } as const;
 
 export class MapPanel extends Phaser.GameObjects.Container {
-  private readonly tex: Phaser.Textures.CanvasTexture;
-  private readonly marks: Phaser.GameObjects.Graphics;
-  private readonly legend: Phaser.GameObjects.Container;
-  private readonly title: Phaser.GameObjects.BitmapText;
+  private tex!: Phaser.Textures.CanvasTexture;
+  private marks!: Phaser.GameObjects.Graphics;
+  private legend!: Phaser.GameObjects.Container;
+  private title!: Phaser.GameObjects.BitmapText;
+  private mw = 0;
+  private mh = 0;
   /** Map colours already worked out, by world cell. */
   private readonly cache = new Map<number, number>();
 
@@ -35,22 +38,36 @@ export class MapPanel extends Phaser.GameObjects.Container {
     private readonly game_: GameScene,
   ) {
     super(scene, 0, 0);
-    const w = PAD * 2 + MAP_W + LEGEND_W;
-    const h = TOP + MAP_H + PAD;
-    if (scene.textures.exists('planet_map')) scene.textures.remove('planet_map');
-    this.tex = scene.textures.createCanvas('planet_map', MAP_W, MAP_H)!;
-    this.title = label(scene, PAD, 7, 'Map', UI_TEXT.accent);
-    const close = label(scene, 0, 7, '[Tab] close', UI_TEXT.dim);
-    close.setX(w - PAD - Math.round(close.width));
-    this.marks = scene.add.graphics();
-    this.legend = scene.add.container(PAD * 2 + MAP_W - 2, TOP);
-    this.add([frame(scene, 'ui_panel', 0, 0, w, h), this.title, close, scene.add.image(PAD, TOP, 'planet_map').setOrigin(0, 0), this.marks, this.legend]);
-    this.setSize(w, h);
     scene.add.existing(this);
   }
 
+  /** Sizes the panel to fit a screen this big (rebuilding it if that changed). */
+  private fit(screenW: number, screenH: number) {
+    const mw = Math.max(120, Math.min(MAX_W, screenW - 16 - PAD * 2 - LEGEND_W) & ~1);
+    const mh = Math.max(80, Math.min(MAX_H, screenH - 16 - TOP - PAD) & ~1);
+    if (mw === this.mw && mh === this.mh) return;
+    this.mw = mw;
+    this.mh = mh;
+    const sc = this.scene;
+    this.removeAll(true);
+    const w = PAD * 2 + mw + LEGEND_W;
+    const h = TOP + mh + PAD;
+    if (sc.textures.exists('planet_map')) sc.textures.remove('planet_map');
+    this.tex = sc.textures.createCanvas('planet_map', mw, mh)!;
+    this.title = label(sc, PAD, 7, 'Map', UI_TEXT.accent);
+    const close = label(sc, 0, 7, '[Tab] close', UI_TEXT.dim);
+    close.setX(w - PAD - Math.round(close.width));
+    this.marks = sc.add.graphics();
+    this.legend = sc.add.container(PAD * 2 + mw - 2, TOP);
+    this.add([frame(sc, 'ui_panel', 0, 0, w, h), this.title, close, sc.add.image(PAD, TOP, 'planet_map').setOrigin(0, 0), this.marks, this.legend]);
+    this.setSize(w, h);
+  }
+
   /** Redraws the map round the tank. */
-  refresh() {
+  refresh(screenW: number, screenH: number) {
+    this.fit(screenW, screenH);
+    const MAP_W = this.mw;
+    const MAP_H = this.mh;
     const g = this.game_;
     const seed = g.world.seed;
     const ox = Math.floor(g.tank.x / SCALE) - MAP_W / 2;

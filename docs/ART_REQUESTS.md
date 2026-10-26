@@ -163,7 +163,7 @@ Everything below came from PixelLab; the choice of candidates and the packing ar
     - fungus trees: seed 611, 8 picked
     - glass spires: seed 613, 8 picked
     - ruin walls, towers and pillars: seed 614, 14 picked
-  - Collision circles are worked out from each sprite's alpha by a greedy circle cover (fungus trees: just the stalk) and stored in `src/data/propShapes.ts`.
+  - Collision circles are worked out from each sprite's alpha by a greedy circle cover and stored in `src/data/propShapes.ts`. Fungus trees get just the stalk. Ruin walls use up to 16 small circles, covering 74–93% of each sprite (the uncovered bits are thin edges, far narrower than the tank); checked with `?debug`.
 - **`landmarks.png`** (4 frames, 128×128): from `create_image_pro` with 4 candidates each:
   - two skeletons (seed 615)
   - the octagonal monolith (seed 617, #2)

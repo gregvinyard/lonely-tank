@@ -99,7 +99,7 @@ export class HudScene extends Phaser.Scene {
 
     this.prompt = new Plate(this, '', { minHeight: 17 }).setVisible(false);
     this.promptText = this.prompt.text;
-    this.hint = new Plate(this, 'WASD drive · mouse aim · click fire · E use · Esc pause');
+    this.hint = new Plate(this, 'WASD drive · mouse aim · click fire · E use · Tab map · Esc pause');
     this.time.delayedCall(HINT_MS, () => this.tweens.add({ targets: this.hint, alpha: 0, duration: 800 }));
     this.warning = new Plate(this, '', { tint: COLOR.danger, icon: 'icon_warn' }).setVisible(false);
     this.toast = new Plate(this, '').setVisible(false);
@@ -247,7 +247,7 @@ export class HudScene extends Phaser.Scene {
     if (this.paused || this.game_.workshopOpen) return;
     this.mapOpen = !this.mapOpen;
     if (this.mapOpen) {
-      this.map.refresh();
+      this.map.refresh(this.scale.width, this.scale.height);
       this.scene.pause('Game');
     } else {
       this.scene.resume('Game');
