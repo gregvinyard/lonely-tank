@@ -62,8 +62,10 @@ export class LogPanel extends Phaser.GameObjects.Container {
     this.startedAt = now;
     this.title.setText(toFontText(title));
     this.speaker.setText(toFontText(speaker));
+    // Measure the whole text once, so the panel fits it however the font spaces its lines.
+    this.bodyText.setText(toFontText(this.lines.join('\n')));
+    const h = 36 + Math.ceil(this.bodyText.height) + 20;
     this.bodyText.setText('');
-    const h = 36 + this.lines.length * LINE_H + 22;
     this.footer.setY(h - 16);
     this.bg.setSize(W, h);
     this.setSize(W, h);
