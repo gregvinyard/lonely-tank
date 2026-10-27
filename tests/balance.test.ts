@@ -14,10 +14,17 @@ describe('balance', () => {
     circuit: world.drones.length,
   };
   for (const n of world.resources) sweep[n.kind as 'scrap' | 'crystal'] += n.amount;
+  // The home economy: every tier that needs nothing from the outer biomes.
+  const rare = ['prism', 'spore', 'salt', 'relic'] as const;
   const total = { scrap: 0, crystal: 0, circuit: 0 };
-  for (const u of UPGRADES) for (const t of u.tiers) for (const k of ['scrap', 'crystal', 'circuit'] as const) total[k] += t.cost[k] ?? 0;
+  for (const u of UPGRADES) {
+    for (const t of u.tiers) {
+      if (rare.some((k) => t.cost[k])) continue;
+      for (const k of ['scrap', 'crystal', 'circuit'] as const) total[k] += t.cost[k] ?? 0;
+    }
+  }
 
-  it('maxing everything takes between 2 and 5 sweeps of each resource', () => {
+  it('building every home tier takes between 2 and 5 sweeps of each resource', () => {
     for (const k of ['scrap', 'crystal', 'circuit'] as const) {
       const sweeps = total[k] / sweep[k];
       expect(sweeps, k).toBeGreaterThan(2);

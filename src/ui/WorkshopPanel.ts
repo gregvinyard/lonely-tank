@@ -6,9 +6,9 @@ import { checkBuild, service } from '../systems/workshop';
 import type { GameScene } from '../scenes/GameScene';
 import { Button, UI_TEXT, frame, label } from './widgets';
 
-export const WORKSHOP_W = 376;
+export const WORKSHOP_W = 424;
 export const WORKSHOP_H = 196;
-const COLS = 4;
+const COLS = 5;
 const CARD_W = 44;
 const CARD_H = 50;
 const GAP = 4;
@@ -18,7 +18,7 @@ const DETAIL_X = GRID_X + COLS * CARD_W + (COLS - 1) * GAP + 6;
 const DETAIL_W = WORKSHOP_W - DETAIL_X - 8;
 
 /** Item sprites shown at half size as resource icons. */
-export const RESOURCE_ICON: Record<ResourceKind, string> = { scrap: 'scrap', crystal: 'crystal', circuit: 'circuit' };
+export const RESOURCE_ICON: Record<ResourceKind, string> = { scrap: 'scrap', crystal: 'crystal', circuit: 'circuit', prism: 'prism', spore: 'spore', salt: 'salt', relic: 'relic' };
 
 interface Card {
   def: UpgradeDef;
@@ -66,7 +66,7 @@ export class WorkshopPanel extends Phaser.GameObjects.Container {
     // Resources, right-aligned in the header.
     this.counts = {} as Record<ResourceKind, Phaser.GameObjects.BitmapText>;
     RESOURCE_KINDS.forEach((k, i) => {
-      const x = WORKSHOP_W - 150 + i * 48;
+      const x = WORKSHOP_W - 7 * 37 - 4 + i * 37;
       this.add(scene.add.image(x, 4, RESOURCE_ICON[k]).setOrigin(0, 0).setScale(0.5));
       this.counts[k] = label(scene, x + 17, 9, '');
       this.add(this.counts[k]);
@@ -115,7 +115,7 @@ export class WorkshopPanel extends Phaser.GameObjects.Container {
       status: t(70, UI_TEXT.danger),
       buildLabel: label(scene, 0, 4, 'Build [Space]'),
     };
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 4; i++) {
       const icon = scene.add.image(dx + 4 + i * 34, dy + 49, 'scrap').setOrigin(0, 0).setScale(0.5);
       const txt = label(scene, dx + 21 + i * 34, dy + 54, '');
       this.detail.costIcons.push(icon);
@@ -173,7 +173,7 @@ export class WorkshopPanel extends Phaser.GameObjects.Container {
     setText(this.serviceCosts[1], `${WORKSHOP.repair.scrap} scrap · hull ${Math.ceil(g.hull)}/${g.maxHull}`);
 
     this.cards.forEach((c, i) => {
-      const check = checkBuild(g.levels, g.inventory, c.def.id);
+      const check = checkBuild(g.levels, g.inventory, c.def.id, g.logs);
       c.button.setFocused(i === this.selected);
       c.button.setEnabled(check.ok || i === this.selected || check.reason === 'max');
       // Locked lines (missing a requirement) are faded out.
@@ -185,7 +185,7 @@ export class WorkshopPanel extends Phaser.GameObjects.Container {
     const def = card.def;
     const level = g.levels[def.id];
     const max = def.tiers.length;
-    const check = checkBuild(g.levels, g.inventory, def.id);
+    const check = checkBuild(g.levels, g.inventory, def.id, g.logs);
     const d = this.detail;
     setText(d.name, def.name);
     setText(d.tier, level >= max ? `Tier ${level}/${max} · max` : `Tier ${level}/${max}`);

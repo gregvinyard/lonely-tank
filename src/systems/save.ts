@@ -1,6 +1,6 @@
 import { UPGRADES, noUpgrades, type UpgradeLevels } from '../data/upgrades';
-import type { Inventory } from './inventory';
-import type { ResourceKind } from './resources';
+import { createInventory, type Inventory } from './inventory';
+import { RARE_KINDS, RESOURCE_KINDS, type ResourceKind } from './resources';
 
 // localStorage save. Bump SAVE_VERSION whenever the shape changes and add a
 // migration from the previous version; unknown versions are ignored and the
@@ -106,6 +106,8 @@ export function parseSave(raw: string): SaveData | undefined {
   if (!isObj(tank) || ![tank.x, tank.y, tank.hull, tank.fuel].every(isNum)) return undefined;
   if (tank.battery !== undefined && !isNum(tank.battery)) return undefined;
   if (!isObj(inventory) || ![inventory.scrap, inventory.crystal, inventory.circuit].every(isCount)) return undefined;
+  // v0.7's rare materials are optional: older saves have none.
+  if (!RARE_KINDS.every((k) => inventory[k] === undefined || isCount(inventory[k]))) return undefined;
   if (!isEvents(collected) || !isEvents(destroyed)) return undefined;
   if (!Array.isArray(drops) || !drops.every(isDrop)) return undefined;
   if (!isObj(upgrades)) return undefined;
@@ -131,7 +133,7 @@ export function parseSave(raw: string): SaveData | undefined {
       fuel: tank.fuel as number,
       ...(tank.battery === undefined ? {} : { battery: tank.battery as number }),
     },
-    inventory: { scrap: inventory.scrap as number, crystal: inventory.crystal as number, circuit: inventory.circuit as number },
+    inventory: Object.fromEntries(RESOURCE_KINDS.map((k) => [k, (inventory[k] as number | undefined) ?? createInventory()[k]])) as Inventory,
     collected: collected.map(({ id, at }) => ({ id, at })),
     destroyed: destroyed.map(({ id, at }) => ({ id, at })),
     drops: drops.map(({ id, kind, amount, x, y }) => ({ id, kind, amount, x, y })),
@@ -182,7 +184,7 @@ function isDrop(v: unknown): v is SavedDrop {
   return (
     isObj(v) &&
     typeof v.id === 'string' &&
-    (v.kind === 'scrap' || v.kind === 'crystal' || v.kind === 'circuit') &&
+    (RESOURCE_KINDS as unknown[]).includes(v.kind) &&
     isCount(v.amount) &&
     (v.amount as number) > 0 &&
     isNum(v.x) &&

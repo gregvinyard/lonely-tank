@@ -201,9 +201,21 @@ Developer feedback: good; rocks needed size variety and jiggled while moving (fi
 
 **Verified:** typecheck ✅, 166 unit tests ✅, 68 browser tests ✅.
 
+# v0.7 — Signal (`docs/SPEC_v0.7.md`)
+
+## M15 — Rare materials and the crew's trail ✅
+
+- **Rare materials:** prism shards (glass), spore pods (bloom), acid salt (mire) and relic cores (old city). They glow, are announced the first time, and have their own HUD row.
+- **Rare tiers:** a new top tier on every line needs them. A new line, **Power cells**, adds battery and solar.
+- **Story:** six crew caches lead from the ship to the old city. A red beacon arrow and the map show the next one. Each plays a radio log (the game waits). The last log unlocks the **long-range array**, whose final stage plays the ending; then the ship sends out rings of signal.
+- **Goal ladder:** an upgrade, then the signal (log n/6), then the array (n/3).
+- **Art and sound:** new art from PixelLab (four materials, the cache, two upgrade icons) and three Mirelo sounds (radio crackle, array power-up, rare pickup).
+
+**Verified:** typecheck ✅, 181 unit tests ✅ (adds: cache placement for 8 seeds, in their biomes on open ground; logs in order; the array needs every log; rare tiers; power cells; saves with and without rare materials), 71 browser tests ✅ (adds: the first cache calls, its log pauses the game, types out, closes, points to the next, and is saved; prisms in the glass fields are announced; the top scanner tier finds them first; the whole tree, then the array and the ending).
+
 ## Next
 
-- Developer playtest of v0.6, the title screen and the sounds.
+- Developer playtest of v0.7: the trail's distances, rare-material rates, and the ending.
 
 ## Known issues
 

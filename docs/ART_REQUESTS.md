@@ -175,6 +175,20 @@ Everything below came from PixelLab; the choice of candidates and the packing ar
 - **`title_bg.png`** (320×180, opaque): `create_image_pro` (1 candidate, 10 generations): "Title screen backdrop, side view landscape at dusk on a lonely alien desert planet: rust-orange dunes and distant flat-topped mesas, a huge ringed gas giant and two small moons in a deep violet-teal sky with stars, a small battered tank silhouetted on a dune ridge in the lower right third, crashed spaceship wreck far on the horizon." Drawn at a whole-number scale that covers the screen, anchored to the bottom.
 - **`title_logo.png`** (140×60): `create_image_pro` at 160×80 (4 candidates, 10 generations): "Video game title logo reading "LONELY TANK" in big chunky bold blocky pixel letters, two lines… riveted rusty orange metal letters with dark brown outline and teal highlight". Candidate #2 (italic, teal tops over rust), cropped to its bounds plus 2 px.
 
+### Signal (v0.7)
+
+All are 32×32 `create_image_pro` calls (64 candidates, 10 generations each), styled after `crystal.png` (items) or `up_fuel.png` (icons):
+
+| File | Prompt (shortened) | Pick |
+|---|---|---|
+| `prism.png` | Cluster of clear cyan-white glass prism shards with a rainbow glint, on a small grey stone base | #44 (a wide fan, so it doesn't read as a crystal) |
+| `spore.png` | Glowing bioluminescent spore pod: teal-green capsule, pink-violet spots, floating spores, root tendrils | #41 |
+| `salt.png` | Crust of acid salt: pale yellow-green cubic chunks with glowing acid-green cracks | #3 |
+| `relic.png` | Ancient alien relic core: dark bronze hexagon with an amber eye-like lens and runes | #7 |
+| `cache.png` | Orange emergency survival cache with a short antenna and red beacon light, on sand | #12 |
+| `up_power.png` | Battery power cell with a lightning bolt and a small solar panel | #8 |
+| `up_transmitter.png` | Satellite dish on a mast sending curved signal waves, amber emitter | #24 |
+
 ## UI kit (code-drawn)
 
 Frames (`ui_panel`, `ui_plate`, `ui_button*`, `ui_bar`) and 9×9 HUD icons (`icon_hull`, `icon_fuel`, `icon_circuit`, `icon_warn`, `icon_up`) are pixel maps in `src/data/uiKit.ts`, drawn at boot. PixelLab's UI panel tool makes 192–688 px panels, far bigger than this game's ~400 px-tall view, so small frames are hand-drawn to stay on the pixel grid. PixelLab will be used for the larger upgrade icons (M7).
@@ -217,6 +231,9 @@ Processing (scratchpad script, recorded here):
 | Map open/close (new) | `map.mp3` | Holographic map opening: quick electronic whoosh, digital flicker | 1 |
 | Title: start / continue (new) | `start.mp3` | Electric motor spin-up whine with heavy mechanical clunks | 1 |
 | Scraping a cliff, rock or prop at speed (new) | `bump.mp3` | Tank scraping a rock cliff: short grinding metal on stone | 1 |
+| Rare material picked up (v0.7) | `pickupRare.mp3` | Picking up a rare alien artifact: soft resonant crystalline chime, low mysterious hum swell | #2 of 2 |
+| Crew log plays (v0.7) | `radio.mp3` | Old emergency radio switching on: static crackle, tuning squelch, soft two-tone data beep | #2 of 2 |
+| The array answers (v0.7) | `transmit.mp3` | Radio array powering up: deep hum rising, capacitor whine, bright pulse beamed skyward with shimmering echo | #1 of 2 |
 | **Loop:** tank motor (new) | `engine.wav` | Small electric tank driving: humming motor whine, rattling treads on gravel (loop) | #2 of 2 |
 | **Loop:** wind (new) | `wind.wav` | Desolate alien desert wind: soft gusts over dunes, distant hollow howl (20 s loop) | 1 |
 

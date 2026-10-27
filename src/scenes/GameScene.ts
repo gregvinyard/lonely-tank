@@ -22,7 +22,7 @@ import {
 import { sfx, type SfxName } from '../audio/sfx';
 import { ROCK_VARIANTS } from '../data/assets';
 import { FLORA_FRAMES } from '../data/propShapes';
-import { noUpgrades, type UpgradeId, type UpgradeLevels } from '../data/upgrades';
+import { noUpgrades, upgradeDef, type UpgradeId, type UpgradeLevels } from '../data/upgrades';
 import { Burrower } from '../entities/Burrower';
 import { Drone } from '../entities/Drone';
 import type { BurrowEvent } from '../systems/burrower';
@@ -31,7 +31,9 @@ import { keyOnce } from '../input/keyOnce';
 import { applyDamage, canFire, rescuePenalty } from '../systems/combat';
 import { stepPower, stranded } from '../systems/power';
 import { addResource, createInventory, type Inventory } from '../systems/inventory';
-import { nearestInRange, type ResourceKind, type ResourceNode } from '../systems/resources';
+import { RARE_KINDS, isRare, nearestInRange, type ResourceKind, type ResourceNode } from '../systems/resources';
+import { ENDING_ID, LOGS, logId } from '../data/story';
+import { activeCache, cacheSites, logsRead, type CacheSite } from '../systems/story';
 import { SAVE_VERSION, browserStorage, clampTank, clearSave, hasSave, loadSave, writeSave, type SaveData, type SavedDrop } from '../systems/save';
 import { UPGRADE_EFFECTS, computeStats, type TankStats } from '../systems/stats';
 import { build, service, type ActionResult, type ServiceAction, type TankStatus } from '../systems/workshop';
@@ -67,7 +69,24 @@ const DECOR_GLOW = new Map<number, number>([
   ...FLORA_FRAMES.glass.map((f) => [f, 0x80f0ff] as [number, number]),
   ...FLORA_FRAMES.mire.map((f) => [f, 0x9cff6a] as [number, number]),
 ]);
-const PICKUP_SFX: Record<ResourceKind, SfxName> = { scrap: 'pickupScrap', crystal: 'pickupCrystal', circuit: 'pickupCircuit' };
+const PICKUP_SFX: Record<ResourceKind, SfxName> = {
+  scrap: 'pickupScrap',
+  crystal: 'pickupCrystal',
+  circuit: 'pickupCircuit',
+  prism: 'pickupRare',
+  spore: 'pickupRare',
+  salt: 'pickupRare',
+  relic: 'pickupRare',
+};
+/** What a rare material is, announced the first time one is picked up. */
+export const RARE_INFO: Record<(typeof RARE_KINDS)[number], { name: string; blurb: string; light: number }> = {
+  prism: { name: 'Prism shard', blurb: 'Glass Fields · focuses light', light: 0x9ff6ff },
+  spore: { name: 'Spore pod', blurb: 'Fungal Bloom · heals what it grows on', light: 0xc070ff },
+  salt: { name: 'Acid salt', blurb: 'Acid Mire · holds a charge', light: 0xb8ff5a },
+  relic: { name: 'Relic core', blurb: 'Old City · nobody knows', light: 0xffb040 },
+};
+/** How close the tank must be to open a crew cache. */
+const CACHE_RANGE = 48;
 
 /** Emitted on game.events when the player salvages a node. */
 export const COLLECTED_EVENT = 'resource-collected';
@@ -80,10 +99,19 @@ export interface CollectedPayload {
 /** Emitted on game.events when the tank crosses into a biome, or comes across a landmark. */
 export const DISCOVERY_EVENT = 'planet-discovery';
 export interface DiscoveryPayload {
-  /** 'biome': crossed into a biome (first: never been there before). 'landmark': found one. */
-  type: 'biome' | 'landmark';
+  /** 'biome': crossed into a biome (first: never been there before). 'landmark': found one. 'material': a first rare material. */
+  type: 'biome' | 'landmark' | 'material';
   title: string;
   subtitle: string;
+  first: boolean;
+}
+
+/** Emitted on game.events when a crew log is played (index), or the array is finished (ending). */
+export const LOG_EVENT = 'crew-log';
+export interface LogPayload {
+  /** The log played, or undefined for the ending. */
+  index?: number;
+  /** Heard for the first time. */
   first: boolean;
 }
 
@@ -143,6 +171,12 @@ export class GameScene extends Phaser.Scene {
   readonly seeps = new Map<string, { seep: FuelSeep; sprite: Phaser.GameObjects.Image }>();
   /** The seep the tank is close enough to siphon, if any. */
   nearbySeep: FuelSeep | undefined;
+  /** The crew cache the tank is close enough to open (the calling one, or one already heard). */
+  nearbyCache: CacheSite | undefined;
+  /** Crew caches, by log index. */
+  private caches: Phaser.GameObjects.Image[] = [];
+  /** The array's signal rings, once it's answered. */
+  private rings!: Phaser.GameObjects.Graphics;
   /** The biome under the tank. */
   biome: BiomeId = 'flats';
   /** Chunks the tank has been near (for the map), and biomes and landmarks found. */
@@ -210,7 +244,17 @@ export class GameScene extends Phaser.Scene {
   }
 
   get maxBattery() {
-    return BATTERY.max;
+    return this.stats.maxBattery;
+  }
+
+  /** Crew logs heard so far (in order). */
+  get logs() {
+    return logsRead(this.discovered);
+  }
+
+  /** The crew cache whose beacon is calling, if any are left. */
+  get signal(): CacheSite | undefined {
+    return activeCache(this.world.seed, this.discovered);
   }
 
   /** Out of fuel and charge: it can't move until the solar panels recharge it. */
@@ -371,6 +415,16 @@ export class GameScene extends Phaser.Scene {
     this.biome = biomeAt(this.world.seed, start.x, start.y).biome;
     this.discovered.add(`biome:${this.biome}`);
 
+    // The crew's caches: only the one calling and those already heard are out.
+    this.caches = cacheSites(this.world.seed).map((c) => {
+      const img = this.add.image(c.x, c.y, 'cache').setDepth(4).setVisible(false);
+      this.shadows.cast(img, 2);
+      return img;
+    });
+    this.nearbyCache = undefined;
+    // Above the light map, so the signal glows at night.
+    this.rings = this.add.graphics().setDepth(16.5);
+
     const cam = this.cameras.main;
     cam.setBounds(B.min, B.min, B.max - B.min, B.max - B.min);
     cam.centerOn(start.x, start.y);
@@ -485,7 +539,7 @@ export class GameScene extends Phaser.Scene {
         maxFuel: this.maxFuel,
         maxBattery: this.maxBattery,
       },
-      BATTERY,
+      { ...BATTERY, solarPerSec: st.solarPerSec },
     );
     this.fuel = power.fuel;
     // In the ship, it charges off the ship.
@@ -522,8 +576,11 @@ export class GameScene extends Phaser.Scene {
 
     const nodes = Array.from(this.resources.values(), (r) => r.node);
     this.nearby = nearestInRange(this.tank, nodes, RESOURCES.interactRange);
-    this.nearestSalvage = st.scanner > 0 ? nearestInRange(this.tank, nodes, Infinity) : undefined;
+    // The top scanner tier looks for rare materials first.
+    const rare = st.scanner >= 3 ? nearestInRange(this.tank, nodes.filter((n) => isRare(n.kind)), Infinity) : undefined;
+    this.nearestSalvage = st.scanner > 0 ? (rare ?? nearestInRange(this.tank, nodes, Infinity)) : undefined;
     this.nearbySeep = this.nearby ? undefined : nearestInRange(this.tank, Array.from(this.seeps.values(), (s) => s.seep), RESOURCES.interactRange);
+    this.updateCaches(time);
     this.explore();
   }
 
@@ -722,10 +779,20 @@ export class GameScene extends Phaser.Scene {
     add({ x: c.x - 114, y: c.y + 28, radius: 26, color: 0xff4040, intensity: now % 2000 < 260 ? 1 : 0.15, glow: 0.8 });
     add({ x: c.x + 114, y: c.y + 28, radius: 26, color: 0x40ff70, intensity: (now + 1000) % 2000 < 260 ? 1 : 0.15, glow: 0.8 });
     add({ x: c.x, y: c.y - 108, radius: 22, color: 0xffffff, intensity: 0.6, glow: 0.4 });
+    // The array, once it's answered, throbs with the signal.
+    if (this.answered) add({ x: c.x, y: c.y - 40, radius: 120, color: 0xffd890, intensity: 0.5 + 0.4 * Math.sin(now / 255), glow: 0.35 });
     for (const { node, sprite } of this.resources.values()) {
       if (!sprite.visible) continue;
       if (node.kind === 'crystal') add({ x: node.x, y: node.y, radius: 32, color: 0xb488ff, intensity: 0.85, glow: 0.45 });
       else if (node.kind === 'circuit') add({ x: node.x, y: node.y, radius: 20, color: 0x5cffb0, intensity: 0.6, glow: 0.35 });
+      else if (isRare(node.kind)) add({ x: node.x, y: node.y, radius: 34, color: RARE_INFO[node.kind].light, intensity: 0.9, glow: 0.55 });
+    }
+    // The calling cache's beacon blinks red; the ones heard keep a dim lamp.
+    const signal = this.signal;
+    for (const [i, img] of this.caches.entries()) {
+      if (!img.visible) continue;
+      if (i === signal?.index) add({ x: img.x, y: img.y - 6, radius: 40, color: 0xff5040, intensity: now % 1400 < 300 ? 1 : 0.25, glow: 0.8 });
+      else add({ x: img.x, y: img.y, radius: 22, color: 0xffc070, intensity: 0.4, glow: 0.2 });
     }
     for (const { seep } of this.seeps.values()) add({ x: seep.x, y: seep.y, radius: 30, color: 0x8dff6a, intensity: 0.6, glow: 0.35 });
     for (const d of this.drones.values()) add({ x: d.x, y: d.y, radius: 24, color: 0xff4040, intensity: d.brain.mode === 'chase' ? 1 : 0.6, glow: 0.5 });
@@ -961,6 +1028,42 @@ export class GameScene extends Phaser.Scene {
     this.addResourceNode({ id: `${kill}-crystal`, kind: 'crystal', amount: p.drop, x: Math.round(x), y: Math.round(y), angle: 0, dropped: true });
   }
 
+  /** The array is complete: the signal has been answered. */
+  get answered() {
+    return this.levels.transmitter >= upgradeDef('transmitter').tiers.length;
+  }
+
+  /** Shows the caches that are out, finds the one in reach, and sends out the array's rings once it's answered. */
+  private updateCaches(time: number) {
+    const signal = this.signal;
+    const heard = this.logs;
+    this.nearbyCache = undefined;
+    for (const [i, img] of this.caches.entries()) {
+      const out = i < heard || i === signal?.index;
+      img.setVisible(out).setAlpha(i < heard ? 0.75 : 1);
+      if (!out || this.nearby || this.nearbySeep || this.shipState !== 'outside') continue;
+      if (Math.hypot(this.tank.x - img.x, this.tank.y - img.y) <= CACHE_RANGE) this.nearbyCache = cacheSites(this.world.seed)[i];
+    }
+    // Rings of signal spreading from the ship's array, a new one every 1.6 s.
+    this.rings.clear();
+    if (!this.answered) return;
+    const c = this.world.center;
+    for (let k = 0; k < 3; k++) {
+      const t = ((time / 1600 + k / 3) % 1 + 1) % 1;
+      this.rings.lineStyle(2, 0xffe0a0, 0.85 * (1 - t)).strokeCircle(c.x, c.y - 40, Math.round(20 + t * 260));
+    }
+  }
+
+  /** Plays a crew log: the first time, it's heard, saved, and the next cache starts calling. */
+  playLog(index: number) {
+    if (index < 0 || index >= LOGS.length) return;
+    const first = !this.discovered.has(logId(index));
+    this.discovered.add(logId(index));
+    if (first) this.save();
+    sfx.play('radio');
+    this.game.events.emit(LOG_EVENT, { index, first } satisfies LogPayload);
+  }
+
   /** The repair kit slowly mends the hull while the tank is stopped and hasn't been hit for a while. */
   private fieldRepair(time: number, delta: number) {
     const rate = this.stats.repairPerSec;
@@ -970,7 +1073,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   get status(): TankStatus {
-    return { hull: this.hull, fuel: this.fuel, inventory: this.inventory, levels: this.levels };
+    return { hull: this.hull, fuel: this.fuel, inventory: this.inventory, levels: this.levels, logs: this.logs };
   }
 
   /** Refuel or repair; saves when it succeeds. */
@@ -988,6 +1091,16 @@ export class GameScene extends Phaser.Scene {
     sfx.play(result.ok ? 'craft' : 'deny');
     const built = result.ok ? { id, tier: this.levels[id] } : undefined;
     this.game.events.emit(WORKSHOP_EVENT, { action: id, ok: result.ok, message: result.message, built } satisfies WorkshopPayload);
+    // The array's last stage: the signal goes out, and something answers.
+    if (built?.id === 'transmitter' && this.answered) {
+      const first = !this.discovered.has(ENDING_ID);
+      this.discovered.add(ENDING_ID);
+      this.save();
+      sfx.play('transmit');
+      // The message plays once the flash has faded (the game waits while it's showing).
+      this.cameras.main.flash(700, 255, 236, 200);
+      this.time.delayedCall(800, () => this.game.events.emit(LOG_EVENT, { first } satisfies LogPayload));
+    }
   }
 
   private applyResult(result: ActionResult) {
@@ -1100,8 +1213,9 @@ export class GameScene extends Phaser.Scene {
 
   private addResourceNode(node: ResourceNode, fadeIn = false) {
     let glow: Phaser.GameObjects.Image | undefined;
-    if (node.kind === 'crystal') {
+    if (node.kind === 'crystal' || isRare(node.kind)) {
       glow = this.add.image(node.x, node.y, 'glow').setDepth(2);
+      if (isRare(node.kind)) glow.setTint(RARE_INFO[node.kind].light);
       this.tweens.add({ targets: glow, alpha: 0.35, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
     }
     const sprite = this.add.image(node.x, node.y, node.kind).setDepth(4); // upright: the art has a top and bottom
@@ -1118,6 +1232,7 @@ export class GameScene extends Phaser.Scene {
     const node = this.nearby;
     if (node) return this.collect(node);
     if (this.nearbySeep) return this.siphon(this.nearbySeep);
+    if (this.nearbyCache) return this.playLog(this.nearbyCache.index);
     if (this.nearDoor) this.enterShip();
   }
 
@@ -1134,6 +1249,11 @@ export class GameScene extends Phaser.Scene {
     this.nearby = undefined;
     this.inventory = addResource(this.inventory, node.kind, node.amount);
     sfx.play(PICKUP_SFX[node.kind]);
+    if (isRare(node.kind) && !this.discovered.has(`material:${node.kind}`)) {
+      this.discovered.add(`material:${node.kind}`);
+      const info = RARE_INFO[node.kind];
+      this.game.events.emit(DISCOVERY_EVENT, { type: 'material', title: info.name, subtitle: info.blurb, first: true } satisfies DiscoveryPayload);
+    }
 
     if (entry.glow) {
       this.tweens.killTweensOf(entry.glow);

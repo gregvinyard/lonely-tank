@@ -14,6 +14,11 @@ export interface BiomeContents {
   scrap: number;
   crystal: number;
   circuit: number;
+  /** Rare materials (v0.7): prism shards, spore pods, acid salt, old-city relics. */
+  prism: number;
+  spore: number;
+  salt: number;
+  relic: number;
   seep: number;
   drone: number;
   burrower: number;
@@ -41,7 +46,7 @@ export interface BiomeDef {
   contents: BiomeContents;
 }
 
-const none: BiomeContents = { rocks: 0, props: 0, decor: 0, scrap: 0, crystal: 0, circuit: 0, seep: 0, drone: 0, burrower: 0, landmark: 0 };
+const none: BiomeContents = { rocks: 0, props: 0, decor: 0, scrap: 0, crystal: 0, circuit: 0, prism: 0, spore: 0, salt: 0, relic: 0, seep: 0, drone: 0, burrower: 0, landmark: 0 };
 
 export const BIOMES: Record<BiomeId, BiomeDef> = {
   flats: {
@@ -81,7 +86,7 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
     features: { canyon: 0.3 },
     liquid: 'ichor',
     rockTint: 0xffffff,
-    contents: { ...none, rocks: 0.6, props: 2.6, decor: 1, scrap: 0.15, crystal: 1.1, drone: 0.25, landmark: 0.01 },
+    contents: { ...none, rocks: 0.6, props: 2.6, decor: 1, scrap: 0.15, crystal: 1.1, prism: 0.25, drone: 0.25, landmark: 0.01 },
   },
   bloom: {
     id: 'bloom',
@@ -94,7 +99,7 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
     features: { lake: 0.35 },
     liquid: 'ichor',
     rockTint: 0x9fb8c0,
-    contents: { ...none, rocks: 0.6, props: 3, decor: 10, scrap: 0.35, crystal: 0.5, drone: 0.08, burrower: 0.32, landmark: 0.01 },
+    contents: { ...none, rocks: 0.6, props: 3, decor: 10, scrap: 0.35, crystal: 0.5, spore: 0.3, drone: 0.08, burrower: 0.32, landmark: 0.01 },
   },
   mire: {
     id: 'mire',
@@ -107,7 +112,7 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
     features: { lake: 0.85 },
     liquid: 'acid',
     rockTint: 0x9aa070,
-    contents: { ...none, rocks: 1.2, props: 0.4, decor: 6, scrap: 0.45, crystal: 0.1, seep: 0.45, drone: 0.08, burrower: 0.2, landmark: 0.01 },
+    contents: { ...none, rocks: 1.2, props: 0.4, decor: 6, scrap: 0.45, crystal: 0.1, salt: 0.3, seep: 0.45, drone: 0.08, burrower: 0.2, landmark: 0.01 },
   },
   ruins: {
     id: 'ruins',
@@ -120,7 +125,7 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
     features: {},
     liquid: 'ichor',
     rockTint: 0xb0a8c0,
-    contents: { ...none, rocks: 0.3, props: 5, decor: 3, scrap: 0.8, crystal: 0.1, circuit: 0.7, drone: 0.45, landmark: 0.02 },
+    contents: { ...none, rocks: 0.3, props: 5, decor: 3, scrap: 0.8, crystal: 0.1, circuit: 0.7, relic: 0.22, drone: 0.45, landmark: 0.02 },
   },
 };
 

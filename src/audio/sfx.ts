@@ -46,6 +46,9 @@ const SAMPLES = {
   map: { files: ['map.mp3'], gain: 0.35 },
   start: { files: ['start.mp3'], gain: 0.6 },
   bump: { files: ['bump.mp3'], gain: 0.5, jitter: true, minGapMs: 500 },
+  pickupRare: { files: ['pickupRare.mp3'], gain: 0.6, minGapMs: 60 },
+  radio: { files: ['radio.mp3'], gain: 0.45 },
+  transmit: { files: ['transmit.mp3'], gain: 0.6 },
 } satisfies Record<string, Sample>;
 
 export type SfxName = keyof typeof SAMPLES;

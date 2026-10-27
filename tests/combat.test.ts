@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createInventory, type Inventory } from '../src/systems/inventory';
 import { applyDamage, canFire, rescuePenalty } from '../src/systems/combat';
 
 describe('combat rules', () => {
@@ -14,13 +15,14 @@ describe('combat rules', () => {
   });
 
   it('rescue loses 25% of each resource, rounded down', () => {
-    expect(rescuePenalty({ scrap: 3, crystal: 1, circuit: 2 }, 0.25)).toEqual({
-      inventory: { scrap: 3, crystal: 1, circuit: 2 },
-      lost: { scrap: 0, crystal: 0, circuit: 0 },
+    const inv = (o: Partial<Inventory>): Inventory => ({ ...createInventory(), ...o });
+    expect(rescuePenalty(inv({ scrap: 3, crystal: 1, circuit: 2 }), 0.25)).toEqual({
+      inventory: inv({ scrap: 3, crystal: 1, circuit: 2 }),
+      lost: createInventory(),
     });
-    expect(rescuePenalty({ scrap: 4, crystal: 9, circuit: 8 }, 0.25)).toEqual({
-      inventory: { scrap: 3, crystal: 7, circuit: 6 },
-      lost: { scrap: 1, crystal: 2, circuit: 2 },
+    expect(rescuePenalty(inv({ scrap: 4, crystal: 9, circuit: 8, relic: 4 }), 0.25)).toEqual({
+      inventory: inv({ scrap: 3, crystal: 7, circuit: 6, relic: 3 }),
+      lost: inv({ scrap: 1, crystal: 2, circuit: 2, relic: 1 }),
     });
   });
 });

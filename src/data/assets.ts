@@ -252,8 +252,29 @@ export const ASSETS: AssetDef[] = [
       g.fillStyle(0x3fb8a8).fillRect(14, 14, 4, 4);
     },
   },
+  // Rare materials (v0.7), one per outer biome, and the crew's emergency cache.
+  ...(
+    [
+      ['prism', 0x9ff6ff],
+      ['spore', 0x2fa88a],
+      ['salt', 0xc8f060],
+      ['relic', 0xb07a30],
+      ['cache', 0xe07a28],
+    ] as const
+  ).map(
+    ([key, color]): AssetDef => ({
+      key,
+      width: 32,
+      height: 32,
+      file: `assets/${key}.png`,
+      placeholder: (g) => {
+        g.fillStyle(0x0d0b10).fillRect(8, 9, 16, 15);
+        g.fillStyle(color).fillRect(9, 10, 14, 13);
+      },
+    }),
+  ),
   // 32x32 upgrade icons for the workshop cards.
-  ...['plating', 'fuel', 'engine', 'autoloader', 'barrel', 'ap', 'scanner', 'repair'].map(
+  ...['plating', 'fuel', 'engine', 'autoloader', 'barrel', 'ap', 'scanner', 'repair', 'power', 'transmitter'].map(
     (name): AssetDef => ({
       key: `up_${name}`,
       width: 32,

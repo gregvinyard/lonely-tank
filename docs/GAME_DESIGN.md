@@ -224,6 +224,39 @@ Numbers in `BATTERY` (`src/data/tuning.ts`). Pure logic in `src/systems/power.ts
 - **Not tuned to today's map:** fuel and battery are sized for a much bigger world later. On today's map one battery reaches the ship from anywhere.
 - **Pressing E by the door while stranded** still takes the tank in: the ship pulls it in.
 
+## Signal (v0.7)
+
+Numbers in `BIOMES` (rare rates), `UPGRADES`, `UPGRADE_EFFECTS` and `src/data/story.ts` (the logs). Pure logic in `src/systems/story.ts` (cache sites, logs heard), unit tested in `tests/story.test.ts`.
+
+- **Rare materials:**
+  - Prism (glass, 0.25 per chunk), spore (bloom, 0.3), salt (mire, 0.3) and relic (ruins, 0.22).
+  - Each holds 1, or 2 (35%), plus 1 per 14,000 px from the ship.
+  - They come from their own random stream per chunk (salt 37), so v0.6 chunk contents are unchanged.
+  - They glow in their colour.
+  - The first of each kind is announced and saved as `material:kind`.
+- **Rare tiers:**
+  - Every line's top tier needs a rare material; everything below it costs only home salvage.
+  - New tiers: plating 4 (spores), fuel 4 (salt), engine 4 (relic), autoloader 4 (salt + relic), barrel 3 (prism), AP 3 (salt), scanner 3 (prism: rare materials first), repair 3 (3 hull/s, spores).
+  - **Power cells:** +10 battery (salt), ×1.6 solar (prism), then +10 battery and ×2.2 solar (salt + relic).
+- **Crew caches:**
+  - One per log, in a biome region of the log's biome.
+  - Candidate regions are scored by distance from the ship + 0.35 × distance from the previous cache. The lowest wins, and the cache goes on open ground nearest its centre.
+  - Caches keep at least 3,000 px from the ship and 1,500 px from the planet's edge, stay off chunk borders, and have 90 px of clear ground.
+  - The chunk keeps props 48 px away from it.
+  - Seed 1337 puts them 354, 973, 672, 599, 1155 and 948 m from the ship.
+- **Signal:**
+  - Only the next unheard cache and the heard ones are out.
+  - The next one blinks a red beacon. The HUD shows its arrow and distance while it's off screen, and the map marks it (pinned to the edge when it's off the map).
+- **Logs:**
+  - E within 48 px plays a log (heard ones replay).
+  - The panel types at 90 characters per second and the game is paused.
+  - E, Space, Enter, Esc or a click first finishes the text, then closes it.
+  - Heard logs are saved as `log:n`.
+- **The array:**
+  - A workshop line, locked until all six logs are heard.
+  - Stage 3 flashes the screen, plays `transmit` and then the ending text (saved as `ending`).
+  - Afterwards the ship pulses with light and sends out signal rings.
+
 ## The planet (v0.6)
 
 Numbers in `PLANET` (`src/data/tuning.ts`) and `BIOMES` (`src/data/biomes.ts`). Distances are in world px; the HUD shows px / 10 as metres. Pure logic, all unit tested in `tests/planet.test.ts`:

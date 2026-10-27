@@ -32,7 +32,7 @@ test('progress survives a reload', async ({ page }) => {
       s.collect(dropOf(s, a.placement.id, '-drop').node);
       s.collect(dropOf(s, a.placement.id, '-chip').node);
       const chip = dropOf(s, b.placement.id, '-chip').node;
-      s.inventory = { scrap: 9, crystal: 3, circuit: 2 };
+      s.inventory = { ...s.inventory, scrap: 9, crystal: 3, circuit: 2 };
       return { node: node.id, picked: a.placement.id, left: b.placement.id, chip: { x: chip.x, y: chip.y } };
     })()`,
   );
@@ -85,7 +85,7 @@ test('progress survives a reload', async ({ page }) => {
     maxHull: 125,
     hull: 64,
     fuel: 37.5,
-    inventory: { scrap: 1, crystal: 1, circuit: 2 },
+    inventory: { scrap: 1, crystal: 1, circuit: 2, prism: 0, spore: 0, salt: 0, relic: 0 },
     x: parked.x,
     y: parked.y,
     playTime: true,
@@ -115,7 +115,7 @@ test('a v0.1 save is migrated', async ({ page }) => {
     page,
     `(() => { const s = ${SCENE}; return { plating: s.levels.plating, maxHull: s.maxHull, hull: s.hull, inventory: s.inventory, scrap00: s.resources.has('scrap-00'), crystal01: s.resources.has('crystal-01'), drone03: s.drones.has('drone-03') }; })()`,
   );
-  expect(r).toEqual({ plating: 1, maxHull: 125, hull: 90, inventory: { scrap: 5, crystal: 1, circuit: 0 }, scrap00: false, crystal01: false, drone03: false });
+  expect(r).toEqual({ plating: 1, maxHull: 125, hull: 90, inventory: { scrap: 5, crystal: 1, circuit: 0, prism: 0, spore: 0, salt: 0, relic: 0 }, scrap00: false, crystal01: false, drone03: false });
   // Saving writes the new format.
   await page.evaluate(`${SCENE}.save()`);
   expect(await read<number>(page, `JSON.parse(localStorage.getItem('lonely-tank.save')).version`)).toBe(2);
@@ -137,7 +137,7 @@ test('a corrupted save is ignored and a fresh game starts', async ({ page }) => 
     page,
     `(() => { const s = ${SCENE}; return { inventory: s.inventory, resources: s.resources.size === s.world.resources.length, drones: s.drones.size, built: Object.values(s.levels).reduce((a, b) => a + b, 0), maxHull: s.maxHull, fuel: s.fuel }; })()`,
   );
-  expect(r).toEqual({ inventory: { scrap: 0, crystal: 0, circuit: 0 }, resources: true, drones: 10, built: 0, maxHull: 100, fuel: 100 });
+  expect(r).toEqual({ inventory: { scrap: 0, crystal: 0, circuit: 0, prism: 0, spore: 0, salt: 0, relic: 0 }, resources: true, drones: 10, built: 0, maxHull: 100, fuel: 100 });
   expect(warnings.some((w) => w.includes('unreadable save'))).toBe(true);
   expect(warnings.some((w) => w.startsWith('ERROR'))).toBe(false);
   // Starting the game replaced the garbage with a valid save.
@@ -146,7 +146,7 @@ test('a corrupted save is ignored and a fresh game starts', async ({ page }) => 
 
 test('?newgame wipes the save', async ({ page }) => {
   await start(page);
-  await page.evaluate(`(() => { const s = ${SCENE}; s.inventory = { scrap: 8, crystal: 2, circuit: 0 }; s.buildUpgrade('plating'); })()`);
+  await page.evaluate(`(() => { const s = ${SCENE}; s.inventory = { ...s.inventory, scrap: 8, crystal: 2, circuit: 0 }; s.buildUpgrade('plating'); })()`);
   await start(page, '/?play&newgame');
   expect(await read<number>(page, `${SCENE}.levels.plating`)).toBe(0);
   expect(new URL(page.url()).searchParams.has('newgame')).toBe(false);

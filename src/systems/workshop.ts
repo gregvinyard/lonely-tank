@@ -9,6 +9,8 @@ export interface TankStatus {
   fuel: number;
   inventory: Inventory;
   levels: UpgradeLevels;
+  /** Crew logs read so far (the array needs them all). */
+  logs?: number;
 }
 
 export interface RepairTuning {
@@ -24,7 +26,7 @@ export function canAfford(inv: Inventory, cost: Cost): boolean {
 }
 
 export function spend(inv: Inventory, cost: Cost): Inventory {
-  return { scrap: inv.scrap - (cost.scrap ?? 0), crystal: inv.crystal - (cost.crystal ?? 0), circuit: inv.circuit - (cost.circuit ?? 0) };
+  return Object.fromEntries(RESOURCE_KINDS.map((k) => [k, inv[k] - (cost[k] ?? 0)])) as Inventory;
 }
 
 /** "8 scrap, 2 crystal, 1 circuit" */
@@ -54,7 +56,7 @@ export type BuildCheck =
   | { ok: false; reason: 'max' | 'locked' | 'cost'; message: string; tier?: number; cost?: Cost };
 
 /** Whether the next tier of a line can be built now, and why not. */
-export function checkBuild(levels: UpgradeLevels, inv: Inventory, id: UpgradeId): BuildCheck {
+export function checkBuild(levels: UpgradeLevels, inv: Inventory, id: UpgradeId, logs = 0): BuildCheck {
   const def = upgradeDef(id);
   const tier = levels[id];
   if (tier >= def.tiers.length) return { ok: false, reason: 'max', message: 'Fully upgraded' };
@@ -62,13 +64,16 @@ export function checkBuild(levels: UpgradeLevels, inv: Inventory, id: UpgradeId)
     const req = upgradeDef(def.requires.id);
     return { ok: false, reason: 'locked', message: `Needs ${req.name} ${def.requires.tier}`, tier: tier + 1, cost: def.tiers[tier].cost };
   }
+  if (def.requiresLogs && logs < def.requiresLogs) {
+    return { ok: false, reason: 'locked', message: "Needs the crew's plans", tier: tier + 1, cost: def.tiers[tier].cost };
+  }
   const cost = def.tiers[tier].cost;
   if (!canAfford(inv, cost)) return { ok: false, reason: 'cost', message: `Need ${costText(cost)}`, tier: tier + 1, cost };
   return { ok: true, tier: tier + 1, cost };
 }
 
 export function build(s: TankStatus, id: UpgradeId): ActionResult {
-  const check = checkBuild(s.levels, s.inventory, id);
+  const check = checkBuild(s.levels, s.inventory, id, s.logs);
   if (!check.ok) return { ok: false, message: check.message };
   const before = computeStats(s.levels);
   const levels = { ...s.levels, [id]: check.tier };
@@ -90,21 +95,11 @@ export function tiersBuilt(levels: UpgradeLevels): number {
   return UPGRADES.reduce((n, u) => n + levels[u.id], 0);
 }
 
-export function linesMaxed(levels: UpgradeLevels): number {
-  return UPGRADES.filter((u) => levels[u.id] >= u.tiers.length).length;
-}
-
-export const TOTAL_TIERS = UPGRADES.reduce((n, u) => n + u.tiers.length, 0);
-
-/** The goal ladder shown in the HUD. */
-export function goalText(levels: UpgradeLevels): string {
-  const built = tiersBuilt(levels);
-  const maxed = linesMaxed(levels);
-  const top = Math.max(...UPGRADES.map((u) => levels[u.id]));
-  if (built === 0) return 'Goal: salvage and build an upgrade';
-  if (top < 2) return 'Goal: reach tier 2 in any upgrade';
-  if (built < 6) return `Goal: build 6 upgrade tiers · ${built}/6`;
-  if (maxed < 3) return `Goal: max out 3 upgrades · ${maxed}/3`;
-  if (built < TOTAL_TIERS) return `Goal: max everything · ${built}/${TOTAL_TIERS}`;
-  return 'Fully upgraded · explore freely';
+/** The goal shown in the HUD: a first upgrade, then the crew's trail, then the array. */
+export function goalText(levels: UpgradeLevels, logs: number, totalLogs: number): string {
+  if (tiersBuilt(levels) === 0) return 'Goal: salvage and build an upgrade';
+  if (logs < totalLogs) return `Goal: follow the signal · log ${logs}/${totalLogs}`;
+  const array = upgradeDef('transmitter');
+  if (levels.transmitter < array.tiers.length) return `Goal: rebuild the array · ${levels.transmitter}/${array.tiers.length}`;
+  return 'Signal answered · explore freely';
 }

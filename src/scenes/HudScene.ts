@@ -6,21 +6,25 @@ import { upgradeDef } from '../data/upgrades';
 import { compassPlacement } from '../systems/compass';
 import type { Inventory } from '../systems/inventory';
 import type { ResourceKind } from '../systems/resources';
-import { RESOURCE_KINDS } from '../systems/resources';
+import { RARE_KINDS, RESOURCE_KINDS, isRare } from '../systems/resources';
+import { ENDING, LOGS } from '../data/story';
+import { LogPanel } from '../ui/LogPanel';
 import { goalText } from '../systems/workshop';
 import { RESOURCE_ICON, WorkshopPanel } from '../ui/WorkshopPanel';
 import { MapPanel } from '../ui/MapPanel';
 import { Reticle } from '../ui/Reticle';
-import { Bar, Plate, UI_TEXT, centerOn, frame, label } from '../ui/widgets';
+import { Bar, Plate, SIGNAL_COLOR, UI_TEXT, centerOn, frame, label } from '../ui/widgets';
 import {
   COLLECTED_EVENT,
   DISCOVERY_EVENT,
+  LOG_EVENT,
   RESCUED_EVENT,
   SIPHON_EVENT,
   WORKSHOP_EVENT,
   type CollectedPayload,
   type DiscoveryPayload,
   type GameScene,
+  type LogPayload,
   type RescuedPayload,
   type WorkshopPayload,
 } from './GameScene';
@@ -28,15 +32,33 @@ import {
 const COLOR = { ...UI_TEXT, hull: UI_TEXT.good } as const;
 /** Bar length for the base hull/fuel; bars grow with upgrades. */
 const BAR_W = 48;
-const LABELS: Record<ResourceKind, string> = { scrap: 'Scrap', crystal: 'Crystal', circuit: 'Circuit' };
-const KIND_COLOR: Record<ResourceKind, number> = { scrap: 0xc9cdd2, crystal: 0xc9a6f2, circuit: 0x7ec850 };
+const LABELS: Record<ResourceKind, string> = {
+  scrap: 'Scrap',
+  crystal: 'Crystal',
+  circuit: 'Circuit',
+  prism: 'Prism',
+  spore: 'Spore',
+  salt: 'Salt',
+  relic: 'Relic',
+};
+const KIND_COLOR: Record<ResourceKind, number> = {
+  scrap: 0xc9cdd2,
+  crystal: 0xc9a6f2,
+  circuit: 0x7ec850,
+  prism: 0x9ff6ff,
+  spore: 0xd08cff,
+  salt: 0xc8f060,
+  relic: 0xffb040,
+};
 const PANEL_H = 96;
+/** Extra panel height for the row of rare materials, once any are found. */
+const RARE_ROW = 16;
 const HINT_MS = 45000; // the short controls hint fades after this; the pause screen lists them all
 const CONTROLS: [string, string][] = [
   ['WASD', 'Drive'],
   ['Mouse', 'Aim turret'],
   ['Left click', 'Fire (hold)'],
-  ['E', 'Salvage / siphon / enter'],
+  ['E', 'Salvage / siphon / log / enter'],
   ['E / Esc', 'Leave ship'],
   ['F', 'Solar panels (stopped)'],
   ['1 / 2', 'Refuel / repair'],
@@ -66,6 +88,14 @@ export class HudScene extends Phaser.Scene {
   hint!: Plate;
   private compass!: Phaser.GameObjects.Graphics;
   compassLabel!: Plate;
+  private signalCompass!: Phaser.GameObjects.Graphics;
+  signalLabel!: Plate;
+  logPanel!: LogPanel;
+  logOpen = false;
+  /** The log showing is being heard for the first time (and which one, or the ending). */
+  private logFirst?: LogPayload;
+  private logOpenedAt = 0;
+  private rareIcons: Phaser.GameObjects.Image[] = [];
   banner!: Plate;
   bannerText!: Phaser.GameObjects.BitmapText;
   private bannerTimer?: Phaser.Time.TimerEvent;
@@ -97,6 +127,7 @@ export class HudScene extends Phaser.Scene {
     this.paused = false;
     this.mapOpen = false;
 
+    this.rareIcons = [];
     this.createStatsPanel();
     this.reticle = new Reticle(this);
     this.goal = new Plate(this, '', { tint: COLOR.dim });
@@ -111,6 +142,8 @@ export class HudScene extends Phaser.Scene {
     this.scannerLabel = new Plate(this, '').setVisible(false);
     this.compass = this.add.graphics();
     this.compassLabel = new Plate(this, '', { tint: COLOR.accent });
+    this.signalCompass = this.add.graphics();
+    this.signalLabel = new Plate(this, '', { tint: SIGNAL_COLOR });
 
     this.workshop = new WorkshopPanel(this, this.game_);
     this.workshopMessage = this.workshop.message;
@@ -120,10 +153,14 @@ export class HudScene extends Phaser.Scene {
     this.discovery = new Plate(this, '', { frameKey: 'ui_panel', padX: 9, padY: 7, tint: COLOR.accent }).setVisible(false).setDepth(4);
     this.discovery.text.setCenterAlign();
     this.map = new MapPanel(this, this.game_).setVisible(false).setDepth(9);
+    this.logPanel = new LogPanel(this).setDepth(11);
+    this.logOpen = false;
 
     const kb = this.input.keyboard!;
-    kb.on('keydown-ESC', keyOnce(() => (this.game_.workshopOpen ? this.game_.closeWorkshop() : this.togglePause())));
-    kb.on('keydown-P', keyOnce(() => !this.game_.workshopOpen && this.togglePause()));
+    kb.on('keydown-ESC', keyOnce(() => (this.logOpen ? this.advanceLog() : this.game_.workshopOpen ? this.game_.closeWorkshop() : this.togglePause())));
+    kb.on('keydown-P', keyOnce(() => !this.game_.workshopOpen && !this.logOpen && this.togglePause()));
+    for (const key of ['E', 'SPACE', 'ENTER']) kb.on(`keydown-${key}`, keyOnce(() => this.logOpen && this.advanceLog()));
+    this.input.on('pointerdown', () => this.logOpen && this.advanceLog());
     kb.on('keydown-M', keyOnce(() => this.showToast(sfx.toggleMute() ? 'Sound off' : 'Sound on')));
     kb.addCapture('TAB');
     kb.on('keydown-TAB', keyOnce(() => this.toggleMap()));
@@ -137,14 +174,16 @@ export class HudScene extends Phaser.Scene {
     ] as const) {
       for (const k of keys) nav(k, () => this.workshop.move(dx, dy));
     }
-    nav('SPACE', () => this.workshop.buildSelected());
-    nav('ENTER', () => this.workshop.buildSelected());
+    nav('SPACE', () => !this.logOpen && this.workshop.buildSelected());
+    nav('ENTER', () => !this.logOpen && this.workshop.buildSelected());
 
     const onCollected = (p: CollectedPayload) => this.onCollected(p);
     const onRescued = (p: RescuedPayload) => this.onRescued(p);
     const onWorkshop = (p: WorkshopPayload) => this.onWorkshop(p);
     const onDiscovery = (p: DiscoveryPayload) => this.onDiscovery(p);
     const onSiphon = (p: { amount: number }) => this.showToast(`+${p.amount} fuel siphoned`, 'icon_fuel', 2000);
+    const onLog = (p: LogPayload) => this.openLog(p);
+    this.game.events.on(LOG_EVENT, onLog);
     this.game.events.on(DISCOVERY_EVENT, onDiscovery);
     this.game.events.on(SIPHON_EVENT, onSiphon);
     this.game.events.on(COLLECTED_EVENT, onCollected);
@@ -156,6 +195,7 @@ export class HudScene extends Phaser.Scene {
       this.game.events.off(WORKSHOP_EVENT, onWorkshop);
       this.game.events.off(DISCOVERY_EVENT, onDiscovery);
       this.game.events.off(SIPHON_EVENT, onSiphon);
+      this.game.events.off(LOG_EVENT, onLog);
     });
   }
 
@@ -166,8 +206,11 @@ export class HudScene extends Phaser.Scene {
 
     const node = g.nearby;
     const seep = g.nearbySeep;
+    const cache = g.nearbyCache;
     const prompt = node
       ? `[E] Salvage ${LABELS[node.kind]} ×${node.amount}`
+      : cache
+        ? `[E] ${cache.index < g.logs ? 'Replay' : 'Play'} crew log ${cache.index + 1}/${LOGS.length}`
       : seep
         ? g.fuel >= g.maxFuel - 0.5
           ? 'Fuel seep · tanks full'
@@ -191,11 +234,16 @@ export class HudScene extends Phaser.Scene {
     this.layoutPause(width, height);
     centerOn(this.discovery, width / 2, 44);
     if (this.mapOpen) centerOn(this.map, width / 2, height / 2);
+    if (this.logOpen) {
+      this.logPanel.update(this.time.now);
+      centerOn(this.logPanel, width / 2, height / 2);
+    }
     this.updateBars();
     this.updateGoal();
     this.updateWorkshop(width, height);
     this.drawScanner(width, height);
     this.drawCompass(width, height);
+    this.drawSignal(width, height);
   }
 
   private createStatsPanel() {
@@ -205,10 +253,15 @@ export class HudScene extends Phaser.Scene {
     this.batteryBar = new Bar(this, 10, 35, 'icon_battery', BAR_W, BATTERY.max);
     // Half-size item icons: a 2:1 nearest downscale keeps them on the grid.
     this.counts = {} as Record<ResourceKind, Phaser.GameObjects.BitmapText>;
-    RESOURCE_KINDS.forEach((k, i) => {
+    RESOURCE_KINDS.filter((k) => !isRare(k)).forEach((k, i) => {
       this.add.image(9, 46 + i * 16, RESOURCE_ICON[k]).setOrigin(0, 0).setScale(0.5);
       this.counts[k] = label(this, 28, 51 + i * 16, '');
     });
+    // Rare materials share one row, each a small icon and a count, shown once any is found.
+    for (const [i, k] of RARE_KINDS.entries()) {
+      this.rareIcons.push(this.add.image(9 + i * 30, 94, RESOURCE_ICON[k]).setOrigin(0, 0).setScale(0.5).setVisible(false));
+      this.counts[k] = label(this, 25 + i * 30, 99, '').setVisible(false);
+    }
     this.setCounts(this.game_.inventory);
   }
 
@@ -226,18 +279,25 @@ export class HudScene extends Phaser.Scene {
     const batteryBlink = lowBattery && g.fuel <= 0 && g.solarState === 'stowed' && Math.floor(this.time.now / 300) % 2 === 0;
     this.batteryBar.setValue(g.battery, g.maxBattery, batteryBlink ? 0x1c3a36 : lowBattery ? COLOR.danger : COLOR.battery);
     // The stats panel grows with the longest bar or count.
+    const rare = RARE_KINDS.some((k) => g.inventory[k] > 0 || g.discovered.has(`material:${k}`));
+    for (const [i, k] of RARE_KINDS.entries()) {
+      this.rareIcons[i].setVisible(rare);
+      this.counts[k].setVisible(rare);
+    }
     const right = Math.max(
       this.hullBar.x + this.hullBar.width,
       this.fuelBar.x + this.fuelBar.width,
       this.batteryBar.x + this.batteryBar.width,
-      ...Object.values(this.counts).map((t) => t.x + Math.round(t.width)),
+      ...Object.values(this.counts)
+        .filter((t) => t.visible)
+        .map((t) => t.x + Math.round(t.width)),
     );
-    this.panel.setSize(right + 7 - this.panel.x, PANEL_H);
+    this.panel.setSize(right + 7 - this.panel.x, PANEL_H + (rare ? RARE_ROW : 0));
   }
 
   private updateGoal() {
     const g = this.game_;
-    const s = goalText(g.levels);
+    const s = goalText(g.levels, g.logs, LOGS.length);
     if (this.goal.text.text !== s.toUpperCase()) {
       // A new rung (but not the one shown at start-up) means the last goal was met.
       if (this.shownGoal) this.showToast('Goal complete!', 'icon_up', 3000);
@@ -249,7 +309,7 @@ export class HudScene extends Phaser.Scene {
 
   /** The planet map; the game waits while it's open. */
   toggleMap() {
-    if (this.paused || this.game_.workshopOpen) return;
+    if (this.paused || this.game_.workshopOpen || this.logOpen) return;
     this.mapOpen = !this.mapOpen;
     if (this.mapOpen) {
       this.map.refresh(this.scale.width, this.scale.height);
@@ -264,9 +324,9 @@ export class HudScene extends Phaser.Scene {
   }
 
   private onDiscovery({ type, title, subtitle, first }: DiscoveryPayload) {
-    const head = type === 'landmark' ? `Found: ${title}` : first ? `New biome: ${title}` : title;
+    const head = type === 'landmark' ? `Found: ${title}` : type === 'material' ? `New material: ${title}` : first ? `New biome: ${title}` : title;
     this.discovery.setLabel(`${head}
-${subtitle}`, type === 'landmark' || first ? COLOR.accent : COLOR.text);
+${subtitle}`, type !== 'biome' || first ? COLOR.accent : COLOR.text);
     this.discovery.setVisible(true).setAlpha(1);
     this.tweens.killTweensOf(this.discovery);
     this.discoveryTimer?.remove();
@@ -275,7 +335,41 @@ ${subtitle}`, type === 'landmark' || first ? COLOR.accent : COLOR.text);
     );
   }
 
+  /** Plays a crew log (or the ending) in the log panel; the game waits until it's closed. */
+  openLog(p: LogPayload) {
+    const log = p.index === undefined ? undefined : LOGS[p.index];
+    if (log) this.logPanel.open(`Crew log ${p.index! + 1}/${LOGS.length}`, log.speaker, log.text, this.time.now);
+    else this.logPanel.open(ENDING.title, ENDING.speaker, ENDING.text, this.time.now);
+    this.logFirst = p.first ? p : undefined;
+    this.logOpenedAt = this.time.now;
+    if (this.mapOpen) this.toggleMap();
+    if (!this.logOpen) {
+      this.logOpen = true;
+      this.scene.pause('Game');
+      sfx.holdLoops(true);
+    }
+  }
+
+  /** E and friends: finish the text, then close. */
+  advanceLog() {
+    // The key press that opened the log mustn't also skip it.
+    if (this.time.now - this.logOpenedAt < 150) return;
+    if (!this.logPanel.done) return this.logPanel.finish();
+    this.logOpen = false;
+    this.logPanel.setVisible(false);
+    this.scene.resume('Game');
+    this.game_.input.keyboard?.resetKeys();
+    sfx.holdLoops(false);
+    sfx.play('click');
+    const first = this.logFirst;
+    this.logFirst = undefined;
+    if (!first || first.index === undefined) return;
+    if (first.index + 1 < LOGS.length) this.showToast(`New signal · cache ${first.index + 2}/${LOGS.length}`, undefined, 3500);
+    else this.showToast('The array can be rebuilt at the ship', 'icon_up', 4500);
+  }
+
   togglePause() {
+    if (this.logOpen) return;
     if (this.mapOpen) return this.toggleMap();
     this.paused = !this.paused;
     if (this.paused) {
@@ -430,6 +524,36 @@ ${subtitle}`, type === 'landmark' || first ? COLOR.accent : COLOR.text);
     centerOn(this.compassLabel, x - Math.cos(angle) * 36, y - Math.sin(angle) * 22);
   }
 
+  /** The calling crew cache: an arrow at the screen edge with the distance, while it's off screen. */
+  private drawSignal(width: number, height: number) {
+    const g = this.game_;
+    const site = g.signal;
+    this.signalCompass.clear();
+    const view = g.cameras.main.worldView;
+    const target = site && { x: site.x - view.x, y: site.y - view.y };
+    const floor = this.prompt.visible ? this.prompt.y : this.hint.alpha > 0 ? this.hint.y : height;
+    const place = target && !g.workshopOpen ? compassPlacement(target, { width, height: floor - 4 }, 16, 18) : undefined;
+    this.signalLabel.setVisible(!!place);
+    if (!place || !site) return;
+    const x = Math.round(place.x);
+    const y = Math.round(place.y);
+    const { angle } = place;
+    const pt = (dist: number, a: number) => ({ x: x + Math.cos(angle + a) * dist, y: y + Math.sin(angle + a) * dist });
+    const tip = pt(7, 0);
+    const left = pt(5, 2.5);
+    const right = pt(5, -2.5);
+    // The ring blinks like the beacon on the cache.
+    const on = this.time.now % 1400 < 700;
+    this.signalCompass.fillStyle(0x17151b, 0.92).fillCircle(x, y, 10);
+    this.signalCompass.lineStyle(1, 0x5f636b).strokeCircle(x, y, 10);
+    this.signalCompass.lineStyle(1, SIGNAL_COLOR, on ? 0.9 : 0.4).strokeCircle(x, y, 8);
+    this.signalCompass.fillStyle(SIGNAL_COLOR).fillTriangle(tip.x, tip.y, left.x, left.y, right.x, right.y);
+    const meters = Math.round(Math.hypot(g.tank.x - site.x, g.tank.y - site.y) / 10);
+    const s = `Signal ${meters}m`;
+    if (this.signalLabel.text.text !== s.toUpperCase()) this.signalLabel.setLabel(s);
+    centerOn(this.signalLabel, x - Math.cos(angle) * 40, y - Math.sin(angle) * 22);
+  }
+
   private showBanner(message: string, tint: number, icon?: string) {
     this.bannerText.setCenterAlign();
     this.banner.setIcon(icon);
@@ -456,7 +580,9 @@ ${subtitle}`, type === 'landmark' || first ? COLOR.accent : COLOR.text);
   }
 
   private setCounts(inv: Inventory) {
-    for (const k of RESOURCE_KINDS) this.counts[k].setText(`${LABELS[k].toUpperCase().padEnd(8)}${inv[k]}`);
+    for (const k of RESOURCE_KINDS) {
+      this.counts[k].setText(isRare(k) ? String(inv[k]) : `${LABELS[k].toUpperCase().padEnd(8)}${inv[k]}`);
+    }
   }
 
   private onCollected({ kind, amount, inventory }: CollectedPayload) {

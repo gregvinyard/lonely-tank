@@ -5,7 +5,8 @@ import { biomeAt } from './biome';
 import type { BurrowerPlacement } from './burrower';
 import type { DronePlacement } from './drone';
 import { cellSeed } from './noise';
-import type { ResourceNode } from './resources';
+import { RARE_KINDS, type ResourceNode } from './resources';
+import { CACHE_CLEAR, cachesInChunk } from './story';
 import { createRng, randRange, type Rng } from './rng';
 import type { Circle } from './steer';
 import { circleClear, featuresIn, type Feature } from './terrain';
@@ -72,6 +73,8 @@ export interface ChunkContent {
 }
 
 const SALT_CHUNK = 31;
+/** Rare materials draw from their own stream, so adding them left every other chunk's contents as they were. */
+const SALT_RARE = 37;
 const CENTER = WORLD_SIZE / 2;
 /** Room left between solid things: wider than the tank, so nothing seals a gap. */
 const PASSAGE = 2 * 23 + 4;
@@ -154,6 +157,9 @@ function buildChunk(seed: number, cx: number, cy: number): ChunkContent {
     circles.every((c) => circleClear(features, c.x, c.y, c.r + PLANET.terrainMargin)) &&
     circles.every((c) => solids.every((o) => Math.hypot(o.x - c.x, o.y - c.y) >= o.r + c.r + gap));
   const want = (k: keyof BiomeContents, x: number, y: number) => BIOMES[local(x, y)].contents[k] > 0;
+
+  // A crew cache keeps a clearing round it.
+  for (const c of cachesInChunk(seed, cx, cy)) solids.push({ x: c.x, y: c.y, r: CACHE_CLEAR });
 
   // A landmark first, so it gets the room it needs.
   if (rng() < def.landmark) {
@@ -257,6 +263,20 @@ function buildChunk(seed: number, cx: number, cy: number): ChunkContent {
     if (solids.some((o) => Math.hypot(o.x - p.x, o.y - p.y) < o.r + 30)) continue;
     out.seeps.push({ id: `seep@${cx},${cy}#${out.seeps.length}`, x: p.x, y: p.y, frame: Math.floor(rng() * 4), amount: 35 + 10 * bonus });
     n--;
+  }
+
+  // Rare materials, from their own stream, in the biomes they belong to.
+  const rare = createRng(cellSeed(seed, SALT_RARE, cx, cy));
+  for (const kind of RARE_KINDS) {
+    for (let n = count(rare, def[kind]), tries = 0; n > 0 && tries < 20; tries++) {
+      const p = { x: Math.round(randRange(rare, x0 + 32, x0 + s - 32)), y: Math.round(randRange(rare, y0 + 32, y0 + s - 32)) };
+      if (fromShip(p.x, p.y) < HOSTILE_MIN || !circleClear(features, p.x, p.y, 26) || !want(kind, p.x, p.y)) continue;
+      if (solids.some((o) => Math.hypot(o.x - p.x, o.y - p.y) < o.r + 30)) continue;
+      if (out.resources.some((o) => Math.hypot(o.x - p.x, o.y - p.y) < RESOURCES.minSpacing)) continue;
+      const amount = 1 + (rare() < 0.35 ? 1 : 0) + Math.floor(bonus / 2);
+      out.resources.push({ id: `${kind}@${cx},${cy}#${index++}`, kind, amount, x: p.x, y: p.y, angle: 0 });
+      n--;
+    }
   }
 
   // Hostiles get bolder farther out.

@@ -3,14 +3,14 @@ import { addResource, createInventory } from '../src/systems/inventory';
 
 describe('inventory', () => {
   it('starts empty', () => {
-    expect(createInventory()).toEqual({ scrap: 0, crystal: 0, circuit: 0 });
+    expect(createInventory()).toEqual({ scrap: 0, crystal: 0, circuit: 0, prism: 0, spore: 0, salt: 0, relic: 0 });
   });
 
   it('adds without mutating', () => {
     const a = createInventory();
     const b = addResource(addResource(a, 'scrap', 2), 'crystal', 1);
-    expect(b).toEqual({ scrap: 2, crystal: 1, circuit: 0 });
-    expect(a).toEqual({ scrap: 0, crystal: 0, circuit: 0 });
+    expect(b).toEqual({ scrap: 2, crystal: 1, circuit: 0, prism: 0, spore: 0, salt: 0, relic: 0 });
+    expect(a).toEqual(createInventory());
   });
 
   it('rejects negative or fractional amounts', () => {

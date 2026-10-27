@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { noUpgrades } from '../src/data/upgrades';
+import { createInventory } from '../src/systems/inventory';
 import { SAVE_VERSION, clampTank, clearSave, hasSave, loadSave, parseSave, writeSave, type SaveData } from '../src/systems/save';
 
 const good: SaveData = {
@@ -7,7 +8,7 @@ const good: SaveData = {
   seed: 1337,
   playTimeMs: 123456,
   tank: { x: 500, y: 600, hull: 80, fuel: 42.5 },
-  inventory: { scrap: 3, crystal: 1, circuit: 2 },
+  inventory: { ...createInventory(), scrap: 3, crystal: 1, circuit: 2, salt: 2 },
   collected: [
     { id: 'scrap-00', at: 1000 },
     { id: 'drone-02-drop', at: 5000 },
@@ -53,8 +54,17 @@ describe('save', () => {
     expect(parseSave(JSON.stringify(extra))).toEqual({ ...good, upgrades: { ...good.upgrades, engine: 0 } });
   });
 
+  it('loads a v0.6 save with no rare materials as none, and keeps rare drops', () => {
+    const old = { ...good, inventory: { scrap: 3, crystal: 1, circuit: 2 } };
+    expect(parseSave(JSON.stringify(old))?.inventory).toEqual({ ...createInventory(), scrap: 3, crystal: 1, circuit: 2 });
+    const drops = [{ id: 'relic@40,3#2', kind: 'relic', amount: 2, x: 20500, y: 1700 }];
+    expect(parseSave(JSON.stringify({ ...good, drops }))?.drops).toEqual(drops);
+    expect(parseSave(JSON.stringify({ ...good, inventory: { ...good.inventory, salt: -1 } }))).toBeUndefined();
+    expect(parseSave(JSON.stringify({ ...good, drops: [{ ...drops[0], kind: 'gold' }] }))).toBeUndefined();
+  });
+
   it('caps upgrade levels at the number of tiers', () => {
-    expect(parseSave(JSON.stringify({ ...good, upgrades: { ...good.upgrades, plating: 99 } }))?.upgrades.plating).toBe(3);
+    expect(parseSave(JSON.stringify({ ...good, upgrades: { ...good.upgrades, plating: 99 } }))?.upgrades.plating).toBe(4);
   });
 
   it('migrates a v0.1 save', () => {
@@ -63,7 +73,7 @@ describe('save', () => {
       seed: 1337,
       playTimeMs: 0,
       tank: v1.tank,
-      inventory: { scrap: 1, crystal: 1, circuit: 0 },
+      inventory: { ...createInventory(), scrap: 1, crystal: 1 },
       collected: [
         { id: 'scrap-00', at: 0 },
         { id: 'drone-03-drop', at: 0 },

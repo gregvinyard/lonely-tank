@@ -6,7 +6,8 @@ import { chunkKey, chunkOf } from '../systems/chunks';
 import { featuresIn, groundAt } from '../systems/terrain';
 import type { GameScene } from '../scenes/GameScene';
 import { toFontText } from '../data/pixelFont';
-import { UI_TEXT, frame, label } from './widgets';
+import { SIGNAL_COLOR, UI_TEXT, frame, label } from './widgets';
+import { cacheSites } from '../systems/story';
 
 // The planet map: what the tank has seen, coloured by biome, with lakes,
 // canyons and mesas marked, centred on the tank. Unexplored ground is fogged.
@@ -126,6 +127,23 @@ export class MapPanel extends Phaser.GameObjects.Container {
       m.fillStyle(0x0d0b10).fillRect(p.x - 2, p.y - 2, 5, 5);
       m.fillStyle(0xf3e3c3).fillRect(p.x - 1, p.y - 1, 3, 3);
     }
+    // Crew caches heard, and the one calling (shown even in fog, pinned to the edge if it's off the map).
+    const signal = g.signal;
+    for (const c of cacheSites(seed)) {
+      if (c.index >= g.logs) continue;
+      const p = at(c.x, c.y);
+      if (!inside(p)) continue;
+      m.fillStyle(0x0d0b10).fillRect(p.x - 2, p.y - 2, 5, 5);
+      m.fillStyle(0xffc070).fillRect(p.x - 1, p.y - 1, 3, 3);
+    }
+    if (signal) {
+      const p = at(signal.x, signal.y);
+      const x = Math.min(PAD + MAP_W - 4, Math.max(PAD + 3, p.x));
+      const y = Math.min(TOP + MAP_H - 4, Math.max(TOP + 3, p.y));
+      m.fillStyle(0x0d0b10).fillRect(x - 3, y - 3, 7, 7);
+      m.fillStyle(SIGNAL_COLOR).fillRect(x - 2, y - 2, 5, 5);
+      m.fillStyle(0xfff0e0).fillRect(x, y, 1, 1);
+    }
     const t = at(g.tank.x, g.tank.y);
     m.fillStyle(0x0d0b10).fillRect(t.x - 2, t.y - 2, 5, 5);
     m.fillStyle(UI_TEXT.fuel).fillRect(t.x - 1, t.y - 1, 3, 3);
@@ -144,6 +162,8 @@ export class MapPanel extends Phaser.GameObjects.Container {
       [UI_TEXT.accent, 'Ship'],
       [UI_TEXT.fuel, 'You'],
       [0xf3e3c3, 'Landmark'],
+      [SIGNAL_COLOR, 'Signal'],
+      [0xffc070, 'Crew log'],
     ];
     for (const [c, s] of keys) {
       this.legend.add([this.scene.add.rectangle(1, y + 2, 5, 5, c).setOrigin(0, 0), label(this.scene, 11, y, s, UI_TEXT.dim)]);

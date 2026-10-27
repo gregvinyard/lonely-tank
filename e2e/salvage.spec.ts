@@ -24,7 +24,7 @@ test.beforeEach(async ({ page }) => {
 
 test('driving onto a resource and pressing E salvages it', async ({ page }) => {
   const start = await state(page);
-  expect(start.inventory).toEqual({ scrap: 0, crystal: 0, circuit: 0 });
+  expect(start.inventory).toEqual({ scrap: 0, crystal: 0, circuit: 0, prism: 0, spore: 0, salt: 0, relic: 0 });
   // By the ship's door the only prompt is to go in.
   expect(start.prompt).toBe('[E] ENTER SHIP · OR DRIVE IN');
 
@@ -63,7 +63,7 @@ test('pressing E away from the ship with nothing nearby does nothing', async ({ 
   await page.keyboard.press('e');
   await page.waitForTimeout(50);
   const s = await state(page);
-  expect(s.inventory).toEqual({ scrap: 0, crystal: 0, circuit: 0 });
+  expect(s.inventory).toEqual({ scrap: 0, crystal: 0, circuit: 0, prism: 0, spore: 0, salt: 0, relic: 0 });
   expect(await page.evaluate(`${SCENE}.workshopOpen`)).toBe(false);
   expect(await page.evaluate(`${SCENE}.shipState`)).toBe('outside');
 });

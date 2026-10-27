@@ -1,9 +1,16 @@
 import { createRng, randRange } from './rng';
 
-export type ResourceKind = 'scrap' | 'crystal' | 'circuit';
-/** Kinds scattered in the world; circuits only come from drones. */
+/** Rare materials, one from each of the outer biomes; they gate the top upgrade tiers and the array. */
+export type RareKind = 'prism' | 'spore' | 'salt' | 'relic';
+export type ResourceKind = 'scrap' | 'crystal' | 'circuit' | RareKind;
+/** Kinds scattered in the home square; circuits only come from drones there. */
 export type WorldResourceKind = 'scrap' | 'crystal';
-export const RESOURCE_KINDS: ResourceKind[] = ['scrap', 'crystal', 'circuit'];
+export const RARE_KINDS: RareKind[] = ['prism', 'spore', 'salt', 'relic'];
+export const RESOURCE_KINDS: ResourceKind[] = ['scrap', 'crystal', 'circuit', ...RARE_KINDS];
+
+export function isRare(kind: ResourceKind): kind is RareKind {
+  return (RARE_KINDS as ResourceKind[]).includes(kind);
+}
 
 export interface ResourceNode {
   /** Stable across reloads for the same seed, e.g. "scrap-07". */

@@ -3,7 +3,7 @@ import type { Inventory } from '../systems/inventory';
 // The upgrade tree. Every line is data; effects are applied in
 // src/systems/stats.ts and nowhere else.
 
-export type UpgradeId = 'plating' | 'fuelTanks' | 'engine' | 'autoloader' | 'barrel' | 'apShells' | 'scanner' | 'repairKit';
+export type UpgradeId = 'plating' | 'fuelTanks' | 'engine' | 'autoloader' | 'barrel' | 'apShells' | 'scanner' | 'repairKit' | 'power' | 'transmitter';
 
 export type Cost = Partial<Inventory>;
 
@@ -21,6 +21,8 @@ export interface UpgradeDef {
   tiers: UpgradeTier[];
   /** Needs another line at this tier first. */
   requires?: { id: UpgradeId; tier: number };
+  /** Needs this many crew logs read first (the plans for the array are in the last one). */
+  requiresLogs?: number;
 }
 
 export const UPGRADES: UpgradeDef[] = [
@@ -32,6 +34,7 @@ export const UPGRADES: UpgradeDef[] = [
       { cost: { scrap: 8, crystal: 2 }, effect: '+25 max hull' },
       { cost: { scrap: 14, crystal: 4, circuit: 1 }, effect: '+25 max hull' },
       { cost: { scrap: 22, crystal: 6, circuit: 3 }, effect: '+25 max hull' },
+      { cost: { scrap: 26, circuit: 3, spore: 3 }, effect: '+25 hull: living weave' },
     ],
   },
   {
@@ -42,6 +45,7 @@ export const UPGRADES: UpgradeDef[] = [
       { cost: { scrap: 6, crystal: 1 }, effect: '+40 max fuel' },
       { cost: { scrap: 12, crystal: 3 }, effect: '+40 max fuel' },
       { cost: { scrap: 18, crystal: 5, circuit: 2 }, effect: '+40 max fuel' },
+      { cost: { scrap: 22, circuit: 2, salt: 3 }, effect: '+40 max fuel' },
     ],
   },
   {
@@ -52,6 +56,7 @@ export const UPGRADES: UpgradeDef[] = [
       { cost: { scrap: 6, crystal: 2 }, effect: '+12% speed' },
       { cost: { scrap: 12, crystal: 4, circuit: 1 }, effect: '+12% speed' },
       { cost: { scrap: 20, crystal: 6, circuit: 3 }, effect: '+12% speed' },
+      { cost: { scrap: 24, circuit: 3, relic: 2 }, effect: '+12% speed' },
     ],
   },
   {
@@ -62,6 +67,7 @@ export const UPGRADES: UpgradeDef[] = [
       { cost: { scrap: 8, crystal: 1, circuit: 1 }, effect: '-15% reload time' },
       { cost: { scrap: 14, crystal: 3, circuit: 2 }, effect: '-15% reload time' },
       { cost: { scrap: 20, crystal: 5, circuit: 3 }, effect: '-15% reload time' },
+      { cost: { scrap: 24, circuit: 4, salt: 2, relic: 1 }, effect: '-15% reload time' },
     ],
   },
   {
@@ -71,6 +77,7 @@ export const UPGRADES: UpgradeDef[] = [
     tiers: [
       { cost: { scrap: 10, crystal: 2 }, effect: '+30% range' },
       { cost: { scrap: 16, crystal: 4, circuit: 2 }, effect: '+30% range' },
+      { cost: { scrap: 20, crystal: 4, prism: 3 }, effect: '+30% range: prism sight' },
     ],
   },
   {
@@ -81,6 +88,7 @@ export const UPGRADES: UpgradeDef[] = [
     tiers: [
       { cost: { scrap: 12, crystal: 3, circuit: 2 }, effect: '+1 shell damage' },
       { cost: { scrap: 20, crystal: 6, circuit: 4 }, effect: '+1 shell damage' },
+      { cost: { scrap: 24, circuit: 4, salt: 3 }, effect: '+1 damage: acid cores' },
     ],
   },
   {
@@ -90,6 +98,7 @@ export const UPGRADES: UpgradeDef[] = [
     tiers: [
       { cost: { scrap: 5, crystal: 3 }, effect: 'Marks nearest salvage' },
       { cost: { scrap: 10, crystal: 5, circuit: 2 }, effect: 'Shows type and range' },
+      { cost: { scrap: 12, circuit: 2, prism: 2 }, effect: 'Tracks rare materials' },
     ],
   },
   {
@@ -100,6 +109,29 @@ export const UPGRADES: UpgradeDef[] = [
     tiers: [
       { cost: { scrap: 10, crystal: 3 }, effect: 'Repair 0.5/s at rest' },
       { cost: { scrap: 18, crystal: 5, circuit: 3 }, effect: 'Repair 1.5/s at rest' },
+      { cost: { scrap: 20, circuit: 3, spore: 3 }, effect: 'Repair 3/s: spore weave' },
+    ],
+  },
+  {
+    id: 'power',
+    name: 'Power cells',
+    icon: 'up_power',
+    tiers: [
+      { cost: { scrap: 10, crystal: 2, salt: 2 }, effect: '+10 max battery' },
+      { cost: { scrap: 12, crystal: 3, prism: 2 }, effect: '+60% solar charge' },
+      { cost: { scrap: 16, circuit: 3, salt: 3, relic: 1 }, effect: '+10 battery +60% solar' },
+    ],
+  },
+  {
+    // Not a tank upgrade: the ship's long-range array, rebuilt from the crew's plans.
+    id: 'transmitter',
+    name: 'Long-range array',
+    icon: 'up_transmitter',
+    requiresLogs: 6,
+    tiers: [
+      { cost: { scrap: 30, circuit: 6, relic: 2 }, effect: 'Raise the dish frame' },
+      { cost: { crystal: 10, prism: 6 }, effect: 'Fit the prism lens' },
+      { cost: { circuit: 8, salt: 4, spore: 2, relic: 4 }, effect: 'Power the core: answer' },
     ],
   },
 ];

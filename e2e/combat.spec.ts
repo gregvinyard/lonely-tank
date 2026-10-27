@@ -61,7 +61,7 @@ test('fire rate is limited by the cooldown', async ({ page }) => {
 test('a drone ramming a nearly destroyed tank triggers a rescue with salvage loss', async ({ page }) => {
   const result = (await page.evaluate(`(async () => {
     const s = ${SCENE};
-    s.inventory = { scrap: 8, crystal: 4, circuit: 4 };
+    s.inventory = { ...s.inventory, scrap: 8, crystal: 4, circuit: 4 };
     s.hull = 5;
     const d = [...s.drones.values()][0];
     s.tank.reset(d.x + 20, d.y);
@@ -70,7 +70,7 @@ test('a drone ramming a nearly destroyed tank triggers a rescue with salvage los
   })()`)) as { hull: number; inventory: { scrap: number; crystal: number }; x: number; y: number; spawn: { x: number; y: number } };
 
   expect(result.hull).toBe(100);
-  expect(result.inventory).toEqual({ scrap: 6, crystal: 3, circuit: 3 });
+  expect(result.inventory).toEqual({ scrap: 6, crystal: 3, circuit: 3, prism: 0, spore: 0, salt: 0, relic: 0 });
   expect(Math.hypot(result.x - result.spawn.x, result.y - result.spawn.y)).toBeLessThan(4);
   expect(await page.evaluate(`${GAME}.scene.getScene('Hud').banner.visible`)).toBe(true);
 });

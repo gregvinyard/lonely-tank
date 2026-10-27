@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 const GAME = `window.__LT_GAME__`;
 const SCENE = `${GAME}.scene.getScene('Game')`;
 const HUD = `${GAME}.scene.getScene('Hud')`;
-const RICH = `{ scrap: 500, crystal: 500, circuit: 500 }`;
+const RICH = `{ scrap: 500, crystal: 500, circuit: 500, prism: 500, spore: 500, salt: 500, relic: 500 }`;
 
 const read = <T>(page: Page, expr: string) => page.evaluate(expr) as Promise<T>;
 
@@ -38,7 +38,7 @@ test('services: E takes the tank into the ship, 1 refuels, 2 repairs', async ({ 
   expect(await read<string>(page, `${HUD}.promptText.text`)).toBe('[E] ENTER SHIP · OR DRIVE IN');
   await enter(page);
   expect(await read<boolean>(page, `${HUD}.workshop.visible`)).toBe(true);
-  await page.evaluate(`(() => { const s = ${SCENE}; s.fuel = 40; s.hull = 50; s.inventory = { scrap: 4, crystal: 0, circuit: 0 }; })()`);
+  await page.evaluate(`(() => { const s = ${SCENE}; s.fuel = 40; s.hull = 50; s.inventory = { ...s.inventory, scrap: 4, crystal: 0, circuit: 0 }; })()`);
   await press(page, '1');
   await press(page, '2');
   expect(await read(page, `(() => { const s = ${SCENE}; return [s.fuel, s.hull, s.inventory.scrap]; })()`)).toEqual([100, 75, 1]);
@@ -46,15 +46,15 @@ test('services: E takes the tank into the ship, 1 refuels, 2 repairs', async ({ 
 
 test('keyboard: select a card and build it with Space', async ({ page }) => {
   await enter(page);
-  await page.evaluate(`${SCENE}.inventory = { scrap: 8, crystal: 2, circuit: 0 }`);
+  await page.evaluate(`(() => { const s = ${SCENE}; s.inventory = { ...s.inventory, scrap: 8, crystal: 2, circuit: 0 }; })()`);
   await press(page, 'Space'); // plating is selected first
   const r = await read<Record<string, unknown>>(
     page,
     `(() => { const s = ${SCENE}; return { plating: s.levels.plating, maxHull: s.maxHull, hull: s.hull, inventory: s.inventory, banner: ${HUD}.banner.visible && ${HUD}.bannerText.text, goal: ${HUD}.goal.text.text }; })()`,
   );
-  expect(r).toMatchObject({ plating: 1, maxHull: 125, hull: 125, inventory: { scrap: 0, crystal: 0, circuit: 0 } });
+  expect(r).toMatchObject({ plating: 1, maxHull: 125, hull: 125, inventory: { scrap: 0, crystal: 0, circuit: 0, prism: 0, spore: 0, salt: 0, relic: 0 } });
   expect(r.banner).toContain('REINFORCED PLATING 1 BUILT');
-  expect(r.goal).toBe('GOAL: REACH TIER 2 IN ANY UPGRADE');
+  expect(r.goal).toBe('GOAL: FOLLOW THE SIGNAL · LOG 0/6');
   expect(await read<string>(page, `${HUD}.toast.visible && ${HUD}.toast.text.text`)).toBe('GOAL COMPLETE!');
 
   // Not enough for tier 2: nothing is spent.
@@ -66,9 +66,8 @@ test('keyboard: select a card and build it with Space', async ({ page }) => {
 test('a locked line explains its requirement', async ({ page }) => {
   await enter(page);
   await page.evaluate(`${SCENE}.inventory = ${RICH}`);
-  // AP shells: second row, second column.
+  // AP shells: second row, first column.
   await press(page, 'ArrowDown');
-  await press(page, 'ArrowRight');
   expect(await read<string>(page, `${HUD}.workshop.cards[${HUD}.workshop.selected].def.id`)).toBe('apShells');
   await press(page, 'Space');
   expect(await read<number>(page, `${SCENE}.levels.apShells`)).toBe(0);
@@ -120,24 +119,34 @@ test('field repair mends the hull at rest, after a calm period', async ({ page }
   expect(await read<number>(page, `${SCENE}.hull`)).toBeGreaterThan(51);
 });
 
-test('the whole tree can be built to the top of the goal ladder', async ({ page }) => {
+test('the whole tree can be built, the array once the crew logs are heard, and the signal is answered', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  const built = await read<number>(
-    page,
-    `(() => {
-      const s = ${SCENE};
-      s.inventory = { scrap: 9999, crystal: 9999, circuit: 9999 };
-      let n = 0;
-      // Keep building until nothing more can be built (respects requirements by retrying).
-      for (let pass = 0; pass < 5; pass++) for (const id of Object.keys(s.levels)) while (s.levels[id] < 3) { const before = s.levels[id]; s.buildUpgrade(id); if (s.levels[id] === before) break; n++; }
-      return n;
-    })()`,
-  );
+  const buildAll = `(() => {
+    const s = ${SCENE};
+    s.inventory = ${RICH.replace(/500/g, '9999')};
+    let n = 0;
+    // Keep building until nothing more can be built (respects requirements by retrying).
+    for (let pass = 0; pass < 5; pass++) for (const id of Object.keys(s.levels)) while (true) { const before = s.levels[id]; s.buildUpgrade(id); if (s.levels[id] === before) break; n++; }
+    return n;
+  })()`;
+  // Everything but the array, which needs the crew's plans.
+  expect(await read<number>(page, buildAll)).toBe(31);
   await page.waitForTimeout(100);
-  expect(built).toBe(20);
-  expect(await read<string>(page, `${HUD}.goal.text.text`)).toBe('FULLY UPGRADED · EXPLORE FREELY');
-  expect(await read<Record<string, number>>(page, `${SCENE}.stats`)).toMatchObject({ maxHull: 175, maxFuel: 220, damage: 3, scanner: 2 });
+  expect(await read<string>(page, `${HUD}.goal.text.text`)).toBe('GOAL: FOLLOW THE SIGNAL · LOG 0/6');
+  expect(await read<Record<string, number>>(page, `${SCENE}.stats`)).toMatchObject({ maxHull: 200, maxFuel: 260, damage: 4, scanner: 3, maxBattery: 40 });
+  expect(await read<number>(page, `${SCENE}.levels.transmitter`)).toBe(0);
+
+  // With every log heard, the array goes up, and the last stage plays the ending.
+  await page.evaluate(`(() => { const s = ${SCENE}; for (let i = 0; i < 6; i++) s.discovered.add('log:' + i); })()`);
+  expect(await read<number>(page, buildAll)).toBe(3);
+  await page.waitForFunction(`${HUD}.logOpen && ${HUD}.logPanel.visible`);
+  expect(await read<boolean>(page, `${SCENE}.discovered.has('ending')`)).toBe(true);
+  await page.waitForTimeout(200);
+  await press(page, 'e'); // finish the text
+  await press(page, 'e'); // close
+  expect(await read<boolean>(page, `${HUD}.logOpen`)).toBe(false);
+  expect(await read<string>(page, `${HUD}.goal.text.text`)).toBe('SIGNAL ANSWERED · EXPLORE FREELY');
   expect(errors).toEqual([]);
 });
 
